@@ -12,15 +12,14 @@ xpoints=500;
 m = 0;
 x = linspace(0,xmax,xpoints);                  % discretization of the curve
 t = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of time interval
-% logscale to see what takes place for t small
-
 global z1 z2 rr % position of the obstacles in R2, rr= radius of obstacles
 
 z1=[0.5;0];z2=[-0.5;0];
 rr=.03;
 
 sol = pdepe(m,@mypdexpde,@mypdexic,@mypdexbc,x,t);  % Solve GHF
-
+dataPath = 'Outputs_Data/';
+save([dataPath,'sol','.mat'], 'sol','-v7.3')
 
 %% PDE, initial condition and boundary condition functions used
 function [c,f,s] = mypdexpde(x,t,u,DuDx)
