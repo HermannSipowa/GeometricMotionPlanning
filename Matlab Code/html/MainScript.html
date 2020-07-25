@@ -1,0 +1,769 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>MainScript</title><meta name="generator" content="MATLAB 9.5"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2019-10-21"><meta name="DC.source" content="MainScript.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#2">Converting angles in radians</a></li><li><a href="#3">Initial condtions</a></li><li><a href="#4">Integrate the trajectory in cartesian coordinates (Validation purposes only)</a></li><li><a href="#5">Integrating the relative motion in the chief's LVLH frame</a></li><li><a href="#6">Plots</a></li></ul></div><pre class="codeinput">clear <span class="string">all</span>
+close <span class="string">all</span>
+clc
+format <span class="string">long</span>
+start_up
+
+<span class="comment">% Propagating the two trajectory through regular integration</span>
+<span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+<span class="keyword">global</span> mu_Earth ae JD AU Target Chasser index <span class="keyword">...</span>
+    acc2body time2body accrelative timerelative
+
+index = 1;
+ae = 6378.136;
+mu_Earth = 3.986004415E5;
+JD = 2456296.25;
+AU = 149597870.7;
+<span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+<span class="comment">% Target initial conditions(Orbital Elements)</span>
+a1      = 1.5E+4; <span class="comment">% Semi-major axis in Km</span>
+e1      = 0.1;    <span class="comment">% Eccentricity</span>
+inc1    = 10;     <span class="comment">% Inclination in deg0</span>
+BigOmg1 = 50;     <span class="comment">% RAAN in deg</span>
+LitOmg1 = 10;     <span class="comment">% AOP in deg</span>
+f1     = -80;     <span class="comment">% True anomaly in deg</span>
+
+Target = Spacecraft([10 6 2 40 10 0.2 0.5 6 12]); <span class="comment">% Describing the Chief sailcraft characteristic (refer Spacecraft class definition)</span>
+qr_target = [1 0 0 0]'; <span class="comment">% No attitude because we are assuming the target is a cannon ball</span>
+qr_target = qr_target/norm(qr_target);
+Omega_target = zeros(3,1); <span class="comment">% No Angular velocity because we are assuming the target is a cannonball</span>
+
+<span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+<span class="comment">% Chaser initial conditions(Orbital Elements)</span>
+a2      = 1.75E+4; <span class="comment">% Semi-major axis in Km</span>
+e2      = 0.52;    <span class="comment">% Eccentricity</span>
+inc2    = 60.1 ;   <span class="comment">% Inclination in deg</span>
+BigOmg2 = 10;      <span class="comment">% RAAN in deg</span>
+LitOmg2 = 0;       <span class="comment">% AOP in deg</span>
+f2     = 124;      <span class="comment">% True anomaly in deg</span>
+
+Chasser = Spacecraft([30 30 4 116 40 0.9 0.9 3000 6000]); <span class="comment">% Describing the Deputy sailcraft characteristic (refer Spacecraft class definition)</span>
+qr_chasser = [1 1 1 9]'; <span class="comment">% [1 0 0 0]'; %</span>
+qr_chasser =  qr_chasser/norm(qr_chasser); <span class="comment">%</span>
+Omega_chaser = 0.2*[deg2rad(-.5) deg2rad(.4) deg2rad(.1)]'; <span class="comment">% Angular velocity in inertial frame</span>
+</pre><h2 id="2">Converting angles in radians</h2><pre class="codeinput">inc1 = deg2rad(inc1); BigOmg1 = deg2rad(BigOmg1); LitOmg1 = deg2rad(LitOmg1); f1 = deg2rad(f1);
+COE1 = [a1,e1,inc1,BigOmg1,LitOmg1,f1];
+[Position_target,Velocity_target]  = COEstoRV(COE1,mu_Earth);
+
+inc2 = deg2rad(inc2); BigOmg2 = deg2rad(BigOmg2); LitOmg2 = deg2rad(LitOmg2); f2 = deg2rad(f2);
+COE2 = [a2,e2,inc2,BigOmg2,LitOmg2,f2];
+[Position_chaser,Velocity_chaser]  = COEstoRV(COE2,mu_Earth);
+</pre><h2 id="3">Initial condtions</h2><pre class="codeinput">Period = 2*pi*sqrt(a2^3/mu_Earth);
+int_time = 5*Period;
+tspan  = linspace(0,int_time,10000);
+options = odeset(<span class="string">'RelTol'</span>,2.22045e-14,<span class="string">'AbsTol'</span>,2.22045e-40);
+</pre><h2 id="4">Integrate the trajectory in cartesian coordinates (Validation purposes only)</h2><pre class="codeinput"><span class="keyword">for</span> k = 1
+    CN = Quaternion_to_DCM(qr_chasser); Omega_chaser_B = CN*Omega_chaser;
+    Aug_chasser_Xo = [qr_chasser; Omega_chaser_B; Position_chaser; Velocity_chaser];
+    TN = Quaternion_to_DCM(qr_target); Omega_target_B = TN*Omega_target;
+    Aug_target_Xo = [qr_target; Omega_target_B; Position_target; Velocity_target];
+    Aug_Xo = [Aug_chasser_Xo; Aug_target_Xo];
+    tic
+    [time1, Aug_X] = ode113(@(t,Aug_X)my2Bodyfunc(t,Aug_X,Target,Chasser),tspan,Aug_Xo,options);
+    toc
+
+    <span class="comment">% Computing the Sun's position</span>
+    JulianDay = JD+tspan(1)/86400;
+    [XS, Vs, ~] = Ephem(JulianDay,3,<span class="string">'EME2000'</span>);
+    XSUN_ECI = XS/norm(XS);
+    TN = DCM(Position_target,Velocity_target);
+    XSUN_LVLH = TN*XSUN_ECI;
+
+    quaternion_chasser1 = Aug_X(:,1:4);
+    quaternion_target1  = Aug_X(:,14:17);
+    omega_chasser1 = nan(length(time1),3);
+    omega_target1 = nan(length(time1),3);
+    R_target2 = nan(length(time1),3);
+    V_target2 = nan(length(time1),3);
+    R_chasser2 = nan(length(time1),3);
+    V_chasser2 = nan(length(time1),3);
+    TR_rel = nan(length(time1),3);
+    TV_rel = nan(length(time1),3);
+
+    <span class="keyword">for</span> j = 1:length(time1)
+
+        CN = Quaternion_to_DCM(quaternion_chasser1(j,:)');
+        omega_chasser1(j,:) = (CN'*Aug_X(j,5:7)')';
+        Chasser_r = Aug_X(j,8:10)'; Chasser_v = Aug_X(j,11:13)'; Target_r = Aug_X(j,21:23)'; Target_v = Aug_X(j,24:26)';
+        h_vec = cross(Target_r,Target_v); h_norm = norm(h_vec);
+        eh = h_vec/h_norm; rt_norm = norm(Target_r);
+        U_eci_Target  = F_CanonBall(time1(j),Target_r,Target); <span class="comment">% SRP force on the Target</span>
+        N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Target_r/h_norm;
+
+        TN = DCM(Target_r,Target_v); NOmega_target = cross(Target_r,Target_v)/norm(Target_r)^2;
+        NR_rel = Chasser_r - Target_r; NV_rel = Chasser_v - Target_v;
+        TR_rel(j,:) = TN*NR_rel; TV_rel(j,:) = TN*(NV_rel - cross(N_nudot,NR_rel));
+
+    <span class="keyword">end</span>
+    R_chasser1 = [Aug_X(:,8) Aug_X(:,9) Aug_X(:,10)]; V_chasser1 = [Aug_X(:,11) Aug_X(:,12) Aug_X(:,13)];
+    R_target1 = [Aug_X(:,21) Aug_X(:,22) Aug_X(:,23)]; V_target1 = [Aug_X(:,24) Aug_X(:,25) Aug_X(:,26)];
+
+
+<span class="keyword">end</span>
+</pre><pre class="codeoutput">Elapsed time is 13.346945 seconds.
+</pre><h2 id="5">Integrating the relative motion in the chief's LVLH frame</h2><pre class="codeinput">TN = DCM(Position_target,Velocity_target); rt_norm = norm(Position_target);
+h_vec = cross(Position_target,Velocity_target); h_norm = norm(h_vec);
+eh = h_vec/h_norm;
+U_eci_Target  = F_CanonBall(time1(1),Position_target,Target); <span class="comment">% SRP force on the Target</span>
+N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Position_target/h_norm;
+NR_rel = Position_chaser - Position_target; NV_rel2 = Velocity_chaser - Velocity_target;
+TR_rel0 = TN*NR_rel; TV_rel0 = TN*(NV_rel2 - cross(N_nudot,NR_rel));
+X_aug0 = [Position_target; Velocity_target; qr_chasser; Omega_chaser_B; TR_rel0; TV_rel0];
+index = 1;
+tic
+[time, X_rel] = ode113(@(t,X_aug)RelativeMotionODE(t, X_aug, Target, Chasser),time1,X_aug0,options);
+toc
+</pre><pre class="codeoutput">Elapsed time is 9.959191 seconds.
+</pre><h2 id="6">Plots</h2><pre class="codeinput"><span class="keyword">for</span> k = 1
+
+    <span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+    <span class="comment">% Plotting the 3D trajectories</span>
+    <span class="keyword">for</span> ii = 1
+        c1 = rgb(<span class="string">'DeepPink'</span>); c2 = rgb(<span class="string">'Cyan'</span>); c3 = rgb(<span class="string">'Goldenrod'</span>);
+
+        <span class="comment">% Attitude Description of the Spacecraft</span>
+        B_axis1 = [1 0 0]';
+        B_axis2 = [0 1 0]';
+        B_axis3 = [0 0 1]';
+        Len = 5000;
+        CN = Quaternion_to_DCM(qr_chasser);
+        P = R_chasser1(1,:) ; <span class="comment">% you center point</span>
+        L = 2*[1000,1000,100];   <span class="comment">% your cube dimensions</span>
+        shift = 1/2*CN'*L';
+        O = P-shift';            <span class="comment">% Get the origin of cube so that P is at center</span>
+
+        <span class="comment">%=============================================================%</span>
+        <span class="comment">% Ploting the time evolution of the referece frame</span>
+        Reference_N = ReferenceFrame(R_chasser1(1,:)',R_target1(1,:)');
+        NTarget1 = Reference_N'*B_axis1;
+        NTarget2 = Reference_N'*B_axis2;
+        NTarget3 = Reference_N'*B_axis3;
+        v2a = P+Len*NTarget1';
+        va = [v2a;P];
+        v2b = P+Len*NTarget2';
+        vb = [v2b;P];
+        v2c = P+Len*NTarget3';
+        vc = [v2c;P];
+
+        <span class="keyword">for</span> jj=1
+            figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+            h1 = plot3(R_chasser1(:,1),R_chasser1(:,2),R_chasser1(:,3),<span class="string">'b'</span>);
+            hold <span class="string">on</span>
+            cube = plotcube(L,O,1,[1 0 0],CN');  <span class="comment">% use function plotcube</span>
+            Taxis_head1 = plot3(va(:,1),va(:,2),va(:,3),<span class="string">'g--'</span>,<span class="string">'LineWidth'</span>,3);
+            Taxis_head2 = plot3(vb(:,1),vb(:,2),vb(:,3),<span class="string">'b--'</span>,<span class="string">'LineWidth'</span>,3);
+            Taxis_head3 = plot3(vc(:,1),vc(:,2),vc(:,3),<span class="string">'r--'</span>,<span class="string">'LineWidth'</span>,3);
+
+            h2 = plot3(R_target1(:,1),R_target1(:,2),R_target1(:,3),<span class="string">'r'</span>);
+            earth_sphere(<span class="string">'km'</span>);
+            h3 = plot3(R_chasser1(1,1),R_chasser1(1,2),R_chasser1(1,3),<span class="string">'ro'</span>,<span class="keyword">...</span>
+                <span class="string">'LineWidth'</span>,2,<span class="keyword">...</span>
+                <span class="string">'MarkerEdgeColor'</span>,<span class="string">'b'</span>,<span class="keyword">...</span>
+                <span class="string">'MarkerFaceColor'</span>,c1,<span class="keyword">...</span>
+                <span class="string">'MarkerSize'</span>,10);
+            h4 = plot3(R_target1(1,1),R_target1(1,2),R_target1(1,3),<span class="string">'bo'</span>,<span class="keyword">...</span>
+                <span class="string">'LineWidth'</span>,2,<span class="keyword">...</span>
+                <span class="string">'MarkerEdgeColor'</span>,<span class="string">'k'</span>,<span class="keyword">...</span>
+                <span class="string">'MarkerFaceColor'</span>,c2,<span class="keyword">...</span>
+                <span class="string">'MarkerSize'</span>,10);
+            grid <span class="string">on</span>
+            hold <span class="string">off</span>
+            axis <span class="string">equal</span>
+            xlabel(<span class="string">'$X [ Km ]$'</span>)
+            ylabel(<span class="string">'$Y [ Km ]$'</span>)
+            zlabel(<span class="string">'$Z [ Km ]$'</span>)
+            h = legend([h1 h2 h4,h3],{<span class="string">'Chasser'</span>, <span class="string">'Target'</span>,<span class="string">'Chief IC'</span>,<span class="string">'Deputy IC'</span>});
+            rect = [0.25, 0.25, 0.1, 0.1];
+            set(h, <span class="string">'Position'</span>, rect)
+            box <span class="string">on</span>
+            view(132,10)
+        <span class="keyword">end</span>
+
+    <span class="keyword">end</span>
+
+    <span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+    <span class="comment">% Plotting the 3D trajectories</span>
+    <span class="keyword">for</span> ii =1
+        c1 = rgb(<span class="string">'Crimson'</span>); c2 = rgb(<span class="string">'DarkSlateGray'</span>);
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        <span class="keyword">for</span> kk = 1:4
+            subplot(2,2,kk)
+            <span class="keyword">for</span> jj=1
+                h1 = plot3(TR_rel(:,1),TR_rel(:,2),TR_rel(:,3),<span class="string">'b-'</span>);
+                hold <span class="string">on</span>
+                h4 = plot3(X_rel(:,14),X_rel(:,15),X_rel(:,16),<span class="string">'r--'</span>);
+                h2 = plot3(TR_rel(1,1),TR_rel(1,2),TR_rel(1,3),<span class="string">'-'</span>,<span class="string">'color'</span>, c3,<span class="keyword">...</span>
+                    <span class="string">'LineWidth'</span>,2,<span class="keyword">...</span>
+                    <span class="string">'MarkerEdgeColor'</span>,<span class="string">'b'</span>,<span class="keyword">...</span>
+                    <span class="string">'MarkerFaceColor'</span>,c3,<span class="keyword">...</span>
+                    <span class="string">'MarkerSize'</span>,5);
+                h3 = plot3(TR_rel(end,1),TR_rel(end,2),TR_rel(end,3),<span class="string">'bo'</span>,<span class="keyword">...</span>
+                    <span class="string">'LineWidth'</span>,2,<span class="keyword">...</span>
+                    <span class="string">'MarkerEdgeColor'</span>,<span class="string">'k'</span>,<span class="keyword">...</span>
+                    <span class="string">'MarkerFaceColor'</span>,c1,<span class="keyword">...</span>
+                    <span class="string">'MarkerSize'</span>,5);
+                h5 = plot3(0,0,0,<span class="string">'bo'</span>,<span class="keyword">...</span>
+                    <span class="string">'LineWidth'</span>,2,<span class="keyword">...</span>
+                    <span class="string">'MarkerEdgeColor'</span>,<span class="string">'k'</span>,<span class="keyword">...</span>
+                    <span class="string">'MarkerFaceColor'</span>,c2,<span class="keyword">...</span>
+                    <span class="string">'MarkerSize'</span>,15);
+                arrow3D([.5e4,.5e4,.5e4] ,8e3*XSUN_LVLH,c3)
+                h = legend([h1, h4, h5, h2],{<span class="string">'Truth'</span>,<span class="string">'Relative'</span>,<span class="string">'chief'</span>,<span class="string">'Sun Direction'</span>});
+                rect = [0.43, 0.435, 0.125, 0.12];
+                set(h, <span class="string">'Position'</span>, rect)
+                box <span class="string">on</span>
+                grid <span class="string">on</span>
+                xlabel(<span class="string">'X [km]'</span>)
+                ylabel(<span class="string">'Y [km]'</span>)
+                zlabel(<span class="string">'Z [km]'</span>)
+            <span class="keyword">end</span>
+
+            <span class="keyword">if</span> kk == 1
+                view(70,10)
+            <span class="keyword">elseif</span> kk==2
+                view(0,90)  <span class="comment">% XY</span>
+            <span class="keyword">elseif</span> kk==3
+                view(0,0)   <span class="comment">% XZ</span>
+            <span class="keyword">else</span>
+                view(90,0)  <span class="comment">% YZ</span>
+            <span class="keyword">end</span>
+
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Relative Trajectory'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+
+    <span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+    <span class="comment">% Plotting the difference between ECI Cartesian coordinates of the deputy</span>
+    <span class="keyword">for</span> jj=1
+
+        DQ1 = [X_rel(:,14) X_rel(:,17) X_rel(:,15) X_rel(:,18) X_rel(:,16) X_rel(:,19)];
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        YLabel={<span class="string">'$\delta x [km]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{x} [km/s]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta y [km]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{y} [km/s]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta z [km]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{z} [km/s]$'</span>};
+        <span class="keyword">for</span> i=1:6
+            subplot(3,2,i)
+            plot1 = plot(time/86400,DQ1(:,i));
+            ylabel(YLabel(i))
+            xlabel(<span class="string">'days'</span>)
+            grid <span class="string">on</span>
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Relative Position'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+    <span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+    <span class="comment">% Plotting the difference between ECI Cartesian coordinates of the deputy</span>
+    <span class="keyword">for</span> jj=1
+
+        DQ1 = [X_rel(:,14) X_rel(:,17) X_rel(:,15) X_rel(:,18) X_rel(:,16) X_rel(:,19)];
+        DQ2 = [TR_rel(:,1) TV_rel(:,1) TR_rel(:,2) TV_rel(:,2) TR_rel(:,3) TV_rel(:,3)];
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        YLabel={<span class="string">'$\delta x_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta x_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{x}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{x}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta y_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta y_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{y}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{y}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta z_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta z_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}(km)$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\delta \dot{z}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{z}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$'</span>};
+        <span class="keyword">for</span> i=1:6
+            subplot(3,2,i)
+            plot1 = plot(time/86400,DQ1(:,i)-DQ2(:,i));
+            ylabel(YLabel(i))
+            xlabel(<span class="string">'days'</span>)
+            grid <span class="string">on</span>
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Relative Position Difference'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+    <span class="keyword">for</span> jj=1
+        acc2body = [acc2body(:,1), acc2body(:,4), acc2body(:,2), acc2body(:,5), acc2body(:,3), acc2body(:,6)];
+        accrelative = [accrelative(:,1), accrelative(:,4), accrelative(:,2), accrelative(:,5), accrelative(:,3), accrelative(:,6)];
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        YLabel={<span class="string">'$u_{_{\!1}}$'</span>, <span class="string">'$\tau_{_{\!1}}$'</span>, <span class="string">'$u_{_{\!2}}$'</span>,<span class="keyword">...</span>
+            <span class="string">'$\tau_{_{\!2}}$'</span>, <span class="string">'$u_{_{\!3}}$'</span>, <span class="string">'$\tau_{_{\!3}}$'</span>};
+        <span class="keyword">for</span> i=1:6
+            subplot(3,2,i)
+            plot(time2body/86400,acc2body(:,i),<span class="string">'b'</span>) <span class="comment">% -Q2(:,i)</span>
+            hold <span class="string">on</span>
+            plot(timerelative/86400,accrelative(:,i),<span class="string">'r--'</span>) <span class="comment">% -Q2(:,i)</span>
+            ylabel(YLabel(i))
+            xlabel(<span class="string">'days'</span>)
+            grid <span class="string">on</span>
+            <span class="comment">% legend('Classical Dynamics', 'Dual Quaternions')</span>
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Acceleration and Torque on the Flat-Plate'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+
+    <span class="keyword">for</span> jj=1
+        Q1 = Aug_X(:,1:4);
+        Q2 = X_rel(:,7:10);
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        YLabel={<span class="string">'$q_{_{\!1}}$'</span>,<span class="string">'$q_{_{\!2}}$'</span>,<span class="string">'$q_{_{\!3}}$'</span>,<span class="string">'$q_{_{\!4}}$'</span>};
+        <span class="keyword">for</span> i=1:4
+            subplot(2,2,i)
+            plot(time/86400,Q1(:,i),<span class="string">'g'</span>) <span class="comment">% -Q2(:,i)</span>
+            ylabel(YLabel(i))
+            xlabel(<span class="string">'days'</span>)
+            grid <span class="string">on</span>
+            <span class="comment">% legend('Classical Dynamics', 'Dual Quaternions')</span>
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Deputy Attitude (Quaternions)'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+    <span class="comment">%~~~~~~~~~~~~~~~~~~~~~~~~~~%</span>
+    <span class="comment">% Plotting the angular velocy</span>
+    <span class="keyword">for</span> jj=1
+        figure(<span class="string">'Renderer'</span>, <span class="string">'painters'</span>, <span class="string">'Position'</span>, [15 15 900 600])
+        YLabel={<span class="string">'$\omega_{_{\!1}}$'</span>,<span class="string">'$\omega_{_{\!2}}$'</span>,<span class="string">'$\omega_{_{\!3}}$'</span>};
+        <span class="keyword">for</span> i=1:3
+            subplot(3,1,i)
+            <span class="comment">% plot(time/86400,omega_chasser1(:,i)-omega_target1(:,i))</span>
+            plot(time/86400,omega_chasser1(:,i),<span class="string">'b'</span>)
+            ylabel(YLabel(i))
+            xlabel(<span class="string">'days'</span>)
+            grid <span class="string">on</span>
+            <span class="comment">% legend('Classical Dynamics', 'Dual Quaternions')</span>
+        <span class="keyword">end</span>
+        sgt = sgtitle(<span class="string">'Deputy Angular Velocity'</span>,<span class="string">'interpreter'</span>,<span class="string">'tex'</span>);
+        sgt.FontSize = 30;
+    <span class="keyword">end</span>
+
+<span class="keyword">end</span> <span class="comment">% Plots for relative motions (Chaser and Target) with classical dynamics</span>
+</pre><img vspace="5" hspace="5" src="MainScript_01.png" alt=""> <img vspace="5" hspace="5" src="MainScript_02.png" alt=""> <img vspace="5" hspace="5" src="MainScript_03.png" alt=""> <img vspace="5" hspace="5" src="MainScript_04.png" alt=""> <img vspace="5" hspace="5" src="MainScript_05.png" alt=""> <img vspace="5" hspace="5" src="MainScript_06.png" alt=""> <img vspace="5" hspace="5" src="MainScript_07.png" alt=""> <p class="footer"><br><a href="https://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2018b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+clear all
+close all
+clc
+format long
+start_up
+
+% Propagating the two trajectory through regular integration
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+global mu_Earth ae JD AU Target Chasser index ...
+    acc2body time2body accrelative timerelative
+
+index = 1;
+ae = 6378.136;
+mu_Earth = 3.986004415E5;
+JD = 2456296.25;
+AU = 149597870.7;
+%~~~~~~~~~~~~~~~~~~~~~~~~~~%
+% Target initial conditions(Orbital Elements)
+a1      = 1.5E+4; % Semi-major axis in Km
+e1      = 0.1;    % Eccentricity
+inc1    = 10;     % Inclination in deg0
+BigOmg1 = 50;     % RAAN in deg
+LitOmg1 = 10;     % AOP in deg
+f1     = -80;     % True anomaly in deg
+
+Target = Spacecraft([10 6 2 40 10 0.2 0.5 6 12]); % Describing the Chief sailcraft characteristic (refer Spacecraft class definition)
+qr_target = [1 0 0 0]'; % No attitude because we are assuming the target is a cannon ball
+qr_target = qr_target/norm(qr_target);
+Omega_target = zeros(3,1); % No Angular velocity because we are assuming the target is a cannonball
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~%
+% Chaser initial conditions(Orbital Elements)
+a2      = 1.75E+4; % Semi-major axis in Km
+e2      = 0.52;    % Eccentricity
+inc2    = 60.1 ;   % Inclination in deg
+BigOmg2 = 10;      % RAAN in deg
+LitOmg2 = 0;       % AOP in deg
+f2     = 124;      % True anomaly in deg
+
+Chasser = Spacecraft([30 30 4 116 40 0.9 0.9 3000 6000]); % Describing the Deputy sailcraft characteristic (refer Spacecraft class definition)
+qr_chasser = [1 1 1 9]'; % [1 0 0 0]'; %
+qr_chasser =  qr_chasser/norm(qr_chasser); %
+Omega_chaser = 0.2*[deg2rad(-.5) deg2rad(.4) deg2rad(.1)]'; % Angular velocity in inertial frame
+
+
+%% Converting angles in radians
+inc1 = deg2rad(inc1); BigOmg1 = deg2rad(BigOmg1); LitOmg1 = deg2rad(LitOmg1); f1 = deg2rad(f1);
+COE1 = [a1,e1,inc1,BigOmg1,LitOmg1,f1];
+[Position_target,Velocity_target]  = COEstoRV(COE1,mu_Earth);
+
+inc2 = deg2rad(inc2); BigOmg2 = deg2rad(BigOmg2); LitOmg2 = deg2rad(LitOmg2); f2 = deg2rad(f2);
+COE2 = [a2,e2,inc2,BigOmg2,LitOmg2,f2];
+[Position_chaser,Velocity_chaser]  = COEstoRV(COE2,mu_Earth);
+
+
+%% Initial condtions
+Period = 2*pi*sqrt(a2^3/mu_Earth);
+int_time = 5*Period;
+tspan  = linspace(0,int_time,10000);
+options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-40);
+
+
+%% Integrate the trajectory in cartesian coordinates (Validation purposes only)
+for k = 1
+    CN = Quaternion_to_DCM(qr_chasser); Omega_chaser_B = CN*Omega_chaser;
+    Aug_chasser_Xo = [qr_chasser; Omega_chaser_B; Position_chaser; Velocity_chaser];
+    TN = Quaternion_to_DCM(qr_target); Omega_target_B = TN*Omega_target;
+    Aug_target_Xo = [qr_target; Omega_target_B; Position_target; Velocity_target];
+    Aug_Xo = [Aug_chasser_Xo; Aug_target_Xo];
+    tic
+    [time1, Aug_X] = ode113(@(t,Aug_X)my2Bodyfunc(t,Aug_X,Target,Chasser),tspan,Aug_Xo,options);
+    toc
+    
+    % Computing the Sun's position
+    JulianDay = JD+tspan(1)/86400;
+    [XS, Vs, ~] = Ephem(JulianDay,3,'EME2000');
+    XSUN_ECI = XS/norm(XS);
+    TN = DCM(Position_target,Velocity_target);
+    XSUN_LVLH = TN*XSUN_ECI;
+    
+    quaternion_chasser1 = Aug_X(:,1:4);
+    quaternion_target1  = Aug_X(:,14:17);
+    omega_chasser1 = nan(length(time1),3);
+    omega_target1 = nan(length(time1),3);
+    R_target2 = nan(length(time1),3);
+    V_target2 = nan(length(time1),3);
+    R_chasser2 = nan(length(time1),3);
+    V_chasser2 = nan(length(time1),3);
+    TR_rel = nan(length(time1),3);
+    TV_rel = nan(length(time1),3);
+    
+    for j = 1:length(time1)
+        
+        CN = Quaternion_to_DCM(quaternion_chasser1(j,:)');
+        omega_chasser1(j,:) = (CN'*Aug_X(j,5:7)')';
+        Chasser_r = Aug_X(j,8:10)'; Chasser_v = Aug_X(j,11:13)'; Target_r = Aug_X(j,21:23)'; Target_v = Aug_X(j,24:26)';
+        h_vec = cross(Target_r,Target_v); h_norm = norm(h_vec);
+        eh = h_vec/h_norm; rt_norm = norm(Target_r);
+        U_eci_Target  = F_CanonBall(time1(j),Target_r,Target); % SRP force on the Target
+        N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Target_r/h_norm;
+        
+        TN = DCM(Target_r,Target_v); NOmega_target = cross(Target_r,Target_v)/norm(Target_r)^2;
+        NR_rel = Chasser_r - Target_r; NV_rel = Chasser_v - Target_v;
+        TR_rel(j,:) = TN*NR_rel; TV_rel(j,:) = TN*(NV_rel - cross(N_nudot,NR_rel));
+        
+    end
+    R_chasser1 = [Aug_X(:,8) Aug_X(:,9) Aug_X(:,10)]; V_chasser1 = [Aug_X(:,11) Aug_X(:,12) Aug_X(:,13)];
+    R_target1 = [Aug_X(:,21) Aug_X(:,22) Aug_X(:,23)]; V_target1 = [Aug_X(:,24) Aug_X(:,25) Aug_X(:,26)];
+    
+    
+end
+
+
+%% Integrating the relative motion in the chief's LVLH frame
+
+TN = DCM(Position_target,Velocity_target); rt_norm = norm(Position_target);
+h_vec = cross(Position_target,Velocity_target); h_norm = norm(h_vec);
+eh = h_vec/h_norm;
+U_eci_Target  = F_CanonBall(time1(1),Position_target,Target); % SRP force on the Target
+N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Position_target/h_norm;
+NR_rel = Position_chaser - Position_target; NV_rel2 = Velocity_chaser - Velocity_target;
+TR_rel0 = TN*NR_rel; TV_rel0 = TN*(NV_rel2 - cross(N_nudot,NR_rel));
+X_aug0 = [Position_target; Velocity_target; qr_chasser; Omega_chaser_B; TR_rel0; TV_rel0];
+index = 1;
+tic
+[time, X_rel] = ode113(@(t,X_aug)RelativeMotionODE(t, X_aug, Target, Chasser),time1,X_aug0,options);
+toc
+
+
+
+%% Plots
+
+for k = 1
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the 3D trajectories
+    for ii = 1
+        c1 = rgb('DeepPink'); c2 = rgb('Cyan'); c3 = rgb('Goldenrod');
+        
+        % Attitude Description of the Spacecraft
+        B_axis1 = [1 0 0]';
+        B_axis2 = [0 1 0]';
+        B_axis3 = [0 0 1]';
+        Len = 5000;
+        CN = Quaternion_to_DCM(qr_chasser);
+        P = R_chasser1(1,:) ; % you center point
+        L = 2*[1000,1000,100];   % your cube dimensions
+        shift = 1/2*CN'*L';
+        O = P-shift';            % Get the origin of cube so that P is at center
+        
+        %=============================================================%
+        % Ploting the time evolution of the referece frame
+        Reference_N = ReferenceFrame(R_chasser1(1,:)',R_target1(1,:)');
+        NTarget1 = Reference_N'*B_axis1;
+        NTarget2 = Reference_N'*B_axis2;
+        NTarget3 = Reference_N'*B_axis3;
+        v2a = P+Len*NTarget1';
+        va = [v2a;P];
+        v2b = P+Len*NTarget2';
+        vb = [v2b;P];
+        v2c = P+Len*NTarget3';
+        vc = [v2c;P];
+        
+        for jj=1
+            figure('Renderer', 'painters', 'Position', [15 15 900 600])
+            h1 = plot3(R_chasser1(:,1),R_chasser1(:,2),R_chasser1(:,3),'b');
+            hold on
+            cube = plotcube(L,O,1,[1 0 0],CN');  % use function plotcube
+            Taxis_head1 = plot3(va(:,1),va(:,2),va(:,3),'gREPLACE_WITH_DASH_DASH','LineWidth',3);
+            Taxis_head2 = plot3(vb(:,1),vb(:,2),vb(:,3),'bREPLACE_WITH_DASH_DASH','LineWidth',3);
+            Taxis_head3 = plot3(vc(:,1),vc(:,2),vc(:,3),'rREPLACE_WITH_DASH_DASH','LineWidth',3);
+            
+            h2 = plot3(R_target1(:,1),R_target1(:,2),R_target1(:,3),'r');
+            earth_sphere('km');
+            h3 = plot3(R_chasser1(1,1),R_chasser1(1,2),R_chasser1(1,3),'ro',...
+                'LineWidth',2,...
+                'MarkerEdgeColor','b',...
+                'MarkerFaceColor',c1,...
+                'MarkerSize',10);
+            h4 = plot3(R_target1(1,1),R_target1(1,2),R_target1(1,3),'bo',...
+                'LineWidth',2,...
+                'MarkerEdgeColor','k',...
+                'MarkerFaceColor',c2,...
+                'MarkerSize',10);
+            grid on
+            hold off
+            axis equal
+            xlabel('$X [ Km ]$')
+            ylabel('$Y [ Km ]$')
+            zlabel('$Z [ Km ]$')
+            h = legend([h1 h2 h4,h3],{'Chasser', 'Target','Chief IC','Deputy IC'});
+            rect = [0.25, 0.25, 0.1, 0.1];
+            set(h, 'Position', rect)
+            box on
+            view(132,10)
+        end
+        
+    end
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the 3D trajectories
+    for ii =1
+        c1 = rgb('Crimson'); c2 = rgb('DarkSlateGray');
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        for kk = 1:4
+            subplot(2,2,kk)
+            for jj=1
+                h1 = plot3(TR_rel(:,1),TR_rel(:,2),TR_rel(:,3),'b-');
+                hold on
+                h4 = plot3(X_rel(:,14),X_rel(:,15),X_rel(:,16),'rREPLACE_WITH_DASH_DASH');
+                h2 = plot3(TR_rel(1,1),TR_rel(1,2),TR_rel(1,3),'-','color', c3,...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','b',...
+                    'MarkerFaceColor',c3,...
+                    'MarkerSize',5);
+                h3 = plot3(TR_rel(end,1),TR_rel(end,2),TR_rel(end,3),'bo',...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','k',...
+                    'MarkerFaceColor',c1,...
+                    'MarkerSize',5);
+                h5 = plot3(0,0,0,'bo',...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','k',...
+                    'MarkerFaceColor',c2,...
+                    'MarkerSize',15);
+                arrow3D([.5e4,.5e4,.5e4] ,8e3*XSUN_LVLH,c3)
+                h = legend([h1, h4, h5, h2],{'Truth','Relative','chief','Sun Direction'});
+                rect = [0.43, 0.435, 0.125, 0.12];
+                set(h, 'Position', rect)
+                box on
+                grid on
+                xlabel('X [km]')
+                ylabel('Y [km]')
+                zlabel('Z [km]')
+            end
+            
+            if kk == 1
+                view(70,10)
+            elseif kk==2
+                view(0,90)  % XY
+            elseif kk==3
+                view(0,0)   % XZ
+            else
+                view(90,0)  % YZ
+            end
+            
+        end
+        sgt = sgtitle('Relative Trajectory','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the difference between ECI Cartesian coordinates of the deputy
+    for jj=1
+        
+        DQ1 = [X_rel(:,14) X_rel(:,17) X_rel(:,15) X_rel(:,18) X_rel(:,16) X_rel(:,19)];
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\delta x [km]$',...
+            '$\delta \dot{x} [km/s]$',...
+            '$\delta y [km]$',...
+            '$\delta \dot{y} [km/s]$',...
+            '$\delta z [km]$',...
+            '$\delta \dot{z} [km/s]$'};
+        for i=1:6
+            subplot(3,2,i)
+            plot1 = plot(time/86400,DQ1(:,i));
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+        end
+        sgt = sgtitle('Relative Position','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the difference between ECI Cartesian coordinates of the deputy
+    for jj=1
+        
+        DQ1 = [X_rel(:,14) X_rel(:,17) X_rel(:,15) X_rel(:,18) X_rel(:,16) X_rel(:,19)];
+        DQ2 = [TR_rel(:,1) TV_rel(:,1) TR_rel(:,2) TV_rel(:,2) TR_rel(:,3) TV_rel(:,3)];
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\delta x_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta x_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km]$',...
+            '$\delta \dot{x}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{x}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$',...
+            '$\delta y_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta y_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km]$',...
+            '$\delta \dot{y}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{y}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$',...
+            '$\delta z_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta z_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}(km)$',...
+            '$\delta \dot{z}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!True}}} - \delta \dot{z}_{_{_{\!\!\!\!\!\!\!\!\!\!\!\!\!\!Approx}}}[km/s]$'};
+        for i=1:6
+            subplot(3,2,i)
+            plot1 = plot(time/86400,DQ1(:,i)-DQ2(:,i));
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+        end
+        sgt = sgtitle('Relative Position Difference','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    for jj=1
+        acc2body = [acc2body(:,1), acc2body(:,4), acc2body(:,2), acc2body(:,5), acc2body(:,3), acc2body(:,6)];
+        accrelative = [accrelative(:,1), accrelative(:,4), accrelative(:,2), accrelative(:,5), accrelative(:,3), accrelative(:,6)];
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$u_{_{\!1}}$', '$\tau_{_{\!1}}$', '$u_{_{\!2}}$',...
+            '$\tau_{_{\!2}}$', '$u_{_{\!3}}$', '$\tau_{_{\!3}}$'};
+        for i=1:6
+            subplot(3,2,i)
+            plot(time2body/86400,acc2body(:,i),'b') % -Q2(:,i)
+            hold on
+            plot(timerelative/86400,accrelative(:,i),'rREPLACE_WITH_DASH_DASH') % -Q2(:,i)
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Acceleration and Torque on the Flat-Plate','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    
+    for jj=1
+        Q1 = Aug_X(:,1:4);
+        Q2 = X_rel(:,7:10);
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$q_{_{\!1}}$','$q_{_{\!2}}$','$q_{_{\!3}}$','$q_{_{\!4}}$'};
+        for i=1:4
+            subplot(2,2,i)
+            plot(time/86400,Q1(:,i),'g') % -Q2(:,i)
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Deputy Attitude (Quaternions)','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the angular velocy
+    for jj=1
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\omega_{_{\!1}}$','$\omega_{_{\!2}}$','$\omega_{_{\!3}}$'};
+        for i=1:3
+            subplot(3,1,i)
+            % plot(time/86400,omega_chasser1(:,i)-omega_target1(:,i))
+            plot(time/86400,omega_chasser1(:,i),'b')
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Deputy Angular Velocity','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+end % Plots for relative motions (Chaser and Target) with classical dynamics
+
+##### SOURCE END #####
+--></body></html>
