@@ -17,7 +17,9 @@ global z1 z2 rr % position of the obstacles in R2, rr= radius of obstacles
 z1=[0.5;0];z2=[-0.5;0];
 rr=.03;
 
+tic
 sol = pdepe(m,@mypdexpde,@mypdexic,@mypdexbc,x,t);  % Solve GHF
+toc
 dataPath = 'Outputs_Data/';
 save([dataPath,'sol','.mat'], 'sol','-v7.3')
 
