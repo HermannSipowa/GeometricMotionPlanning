@@ -4,7 +4,7 @@ y = zeros(3,length(t));
 y(:,1) = [0 0 0]'; % initial condition
 Sigma=[0 0 0]';
 Omega=[1 0.5 -0.7]';
-F_xy =@(t,Sigma) myODE(t,Sigma,Omega); % change the function as you desire
+F_xy =@(t,Sigma) myMRPsODE(t,Sigma,Omega); % change the function as you desire
 
 for i=1:(length(t)-1) % calculation loop
     k_1 = F_xy(t(i),y(:,i));
@@ -22,9 +22,3 @@ end
 dataPath = 'Outputs_Data/';
 save([dataPath,'yData','.mat'], 'y','-v7.3')
 
-function Sigmadot=myODE(t,Sigma,Omega)
-
-sigma=norm(Sigma);
-sigma_tilde=[0 -Sigma(3) Sigma(2); Sigma(3) 0 -Sigma(1); -Sigma(2) Sigma(1) 0];
-Sigmadot=1/4*((1-sigma^2)*eye(3)+2*sigma_tilde+2*(Sigma*Sigma'))*Omega;
-end
