@@ -1,3 +1,40 @@
+dt=.001; % step size
+t = 1:dt:5; % Calculates upto y(3)
+y = zeros(3,length(t)); 
+y(:,1) = [0 0 0]'; % initial condition
+Sigma=[0 0 0]';
+Omega=[1 0.5 -0.7]';
+F_xy =@(t,Sigma) myODE(t,Sigma,Omega); % change the function as you desire
+
+for i=1:(length(t)-1) % calculation loop
+    k_1 = F_xy(t(i),y(:,i));
+    k_2 = F_xy(t(i)+0.5*dt,y(:,i)+0.5*dt*k_1);
+    k_3 = F_xy((t(i)+0.5*dt),(y(:,i)+0.5*dt*k_2));
+    k_4 = F_xy((t(i)+dt),(y(:,i)+k_3*dt));
+
+    y(:,i+1) = y(:,i) + (1/6)*(k_1+2*k_2+2*k_3+k_4)*dt;  % main equation
+    
+    if norm(y(:,i+1))>1
+        y(:,i+1)=-y(:,i+1)/norm(y(:,i+1))^2;
+    end
+end
+
+dataPath = 'Outputs_Data/';
+save([dataPath,'yData','.mat'], 'y','-v7.3')
+% plot(t,y,'.')
+% xlabel('Time (s)')
+% ylabel('SRP')
+% title('Intrgation of SRP')
+
+function Sigmadot=myODE(t,Sigma,Omega)
+
+sigma=norm(Sigma);
+sigma_tilde=[0 -Sigma(3) Sigma(2); Sigma(3) 0 -Sigma(1); -Sigma(2) Sigma(1) 0];
+Sigmadot=1/4*((1-sigma^2)*eye(3)+2*sigma_tilde+2*(Sigma*Sigma'))*Omega;
+end
+
+
+
 % %% Example 1: 2D Surface in 3D Space
 % %-------------------------------------------
 % close all
@@ -90,29 +127,29 @@
 % end
 % sgt = sgtitle('Example Toy Problem');
 % sgt.FontSize = 20;
-
-
-%-------------------------------------------
-%-------------------------------------------
-function xdot = Pendulum_ode(t,X) % equation to solve
-
-u = X(1); v = X(2); udot = X(3); vdot = X(4);
-a = .01; b = -.01; c = .03; d = -.02; e = .04;
-denominator = 1 + d^2 + e^2 + 2*c*u*(e + 2*(a + b)*v) + 2*d*(2*a*u + c*v)...
-                + c^2*(u^2 + v^2) + 4*(a^2*u^2 + b*v*(e + b*v));
-            
-xdot(1) = udot;
-xdot(2) = vdot;
-xdot(3) = 2*(d + 2*a*u + c*v)*(a*udot^2 + vdot*(c*udot + b*vdot)) / denominator;
-xdot(4) = 2*(e + c*u + 2*b*v)*(a*udot^2 + vdot*(c*udot + b*vdot)) / denominator;
-
-end
-%-------------------------------------------
-function res = Pendulum_bcfcn(ya,yb) % boundary conditions
-x0 = -8; y0 = -7; x_End = 6; y_End = 7;
-Start = [ x0; y0]; End = [x_End; y_End]; 
-
-res = [ya(1:2) - Start
-       yb(1:2) - End];
-end
-%-------------------------------------------
+% 
+% 
+% %-------------------------------------------
+% %-------------------------------------------
+% function xdot = Pendulum_ode(t,X) % equation to solve
+% 
+% u = X(1); v = X(2); udot = X(3); vdot = X(4);
+% a = .01; b = -.01; c = .03; d = -.02; e = .04;
+% denominator = 1 + d^2 + e^2 + 2*c*u*(e + 2*(a + b)*v) + 2*d*(2*a*u + c*v)...
+%                 + c^2*(u^2 + v^2) + 4*(a^2*u^2 + b*v*(e + b*v));
+%             
+% xdot(1) = udot;
+% xdot(2) = vdot;
+% xdot(3) = 2*(d + 2*a*u + c*v)*(a*udot^2 + vdot*(c*udot + b*vdot)) / denominator;
+% xdot(4) = 2*(e + c*u + 2*b*v)*(a*udot^2 + vdot*(c*udot + b*vdot)) / denominator;
+% 
+% end
+% %-------------------------------------------
+% function res = Pendulum_bcfcn(ya,yb) % boundary conditions
+% x0 = -8; y0 = -7; x_End = 6; y_End = 7;
+% Start = [ x0; y0]; End = [x_End; y_End]; 
+% 
+% res = [ya(1:2) - Start
+%        yb(1:2) - End];
+% end
+% %-------------------------------------------

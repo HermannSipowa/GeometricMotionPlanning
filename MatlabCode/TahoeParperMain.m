@@ -329,13 +329,8 @@ end
 
 
 %% fD and its partal derivative
-Fd = [rdot; thetadot; r*thetadot^2 + g*cos(theta)/Mass;
-      -2*rdot*thetadot/r + g*sin(theta)/(Mass*r)];
-pFd = [0, 0, 1, 0;
-       0, 0, 0, 1;
-       thetadot^2, -g*sin(theta)/Mass, 0, 2*r*thetadot;
-       2*rdot*thetadot/r^2 - g*sin(theta)/(Mass*r^2),...
-       g*cos(theta)/(Mass*r), -2*thetadot/r, -2*rdot/r];
+Fd = RelativeMotionODE(t, Xaug, Target, Chasser);
+pFd = Partial_Fd_Quaternion(t, Xaug, Target, Chasser);
 
 
 %% Computing the coeficients to the PDE
