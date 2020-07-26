@@ -14,10 +14,10 @@ start_up
 options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-20);
 global X0 Xf Mass Penalty tMin tMax rMin rMax tClearance rClearance 
 tmax    =  4;                 % Integration time for PDE
-tpoints = 250;                % Number of points in the time discretization
-xpoints = 250;                % Number of points in the spcial discretization
+tpoints = 2500;               % Number of points in the time discretization
+xpoints = 2500;               % Number of points in the spcial discretization
 Mass    = 10;                 % Mass of the ball
-Penalty = 1800;               % Penalty for moving in unfeasible/constrained directions
+Penalty = 5E5;                % Penalty for moving in unfeasible/constrained directions
 X0      = [8 -pi/3 -.15 0]';  % Initial state
 Xf      = [9 0 0 0]';         % Final state
 m       = 0;                  % Integrator parameter (due to cartesian coordinates)

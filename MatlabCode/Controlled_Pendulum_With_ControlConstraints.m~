@@ -19,12 +19,12 @@ global X0 Xf Mass g Penalty tMin tMax rMin rMax ...
        U1_max U2_max tmax xmax 
 tmax    = 3.2;     % Integration time for PDE
 xmax    = 5;
-tpoints = 1E4;   % Number of points in the time discretization
-xpoints = 1E4;   % Number of points in the spcial discretization
+tpoints = 10000;    % Number of points in the time discretization
+xpoints = 10000;    % Number of points in the spcial discretization
 % dx      = 5E-3;
 % x       = 0:dx:1;
-U1_max  = 10;
-U2_max  = 10;
+U1_max  = 100;
+U2_max  = 100;
 Mass    = 2;      % Mass of the ball
 g       = 9.80;   % Gravitational acceleration
 Alpha   = 1E4;
@@ -49,10 +49,10 @@ rClearance = 0.3;
 
 %% Solving the Geodesic (Parabolic PDE, the solution is of form sol(t,x,u)
 tStart = tic;
-Sol = pdepe(m,@MyPendulumControlContraints_pde,@MyPendulumControlContraints_ic,@MyPendulumControlContraints_bc,x,t); 
+sol = pdepe(m,@MyPendulumControlContraints_pde,@MyPendulumControlContraints_ic,@MyPendulumControlContraints_bc,x,t); 
 tEnd = toc(tStart);
 fprintf('%d minutes and %f seconds\n', floor(tEnd/60), rem(tEnd,60));
-save([dataPath,'ControlConstraints_Sol','.mat'], 'Sol','-v7.3')
+save([dataPath,'ControlConstraints_Sol','.mat'], 'sol','-v7.3')
 
 
 % u1 = sol(:,:,1); % radius r
@@ -86,20 +86,20 @@ save([dataPath,'ControlConstraints_Sol','.mat'], 'Sol','-v7.3')
 ctrl(1,:) = sol(end,:,5); % linear control
 ctrl(2,:) = sol(end,:,6); % angular control
 n          = 4;
-Xstar      = zeros(n,length(x));
-Xstar(:,1) = X0(1:4);
+xstar      = zeros(n,length(x));
+xstar(:,1) = X0(1:4);
 F_xy       = @(t,X,U) MyPendulumControlContraints_Dynamics(t,X,U);
 
 for i = 1:(length(x)-1)
     dx = x(i+1) - x(i);
-    k_1 = F_xy(x(i),Xstar(:,i),ctrl(:,i));
-    k_2 = F_xy(x(i)+0.5*dx,Xstar(:,i)+0.5*dx*k_1,ctrl(:,i));
-    k_3 = F_xy((x(i)+0.5*dx),(Xstar(:,i)+0.5*dx*k_2),ctrl(:,i));
-    k_4 = F_xy((x(i)+dx),(Xstar(:,i)+k_3*dx),ctrl(:,i));
+    k_1 = F_xy(x(i),xstar(:,i),ctrl(:,i));
+    k_2 = F_xy(x(i)+0.5*dx,xstar(:,i)+0.5*dx*k_1,ctrl(:,i));
+    k_3 = F_xy((x(i)+0.5*dx),(xstar(:,i)+0.5*dx*k_2),ctrl(:,i));
+    k_4 = F_xy((x(i)+dx),(xstar(:,i)+k_3*dx),ctrl(:,i));
     
-    Xstar(:,i+1) = Xstar(:,i) + (1/6)*(k_1+2*k_2+2*k_3+k_4)*dx;  
+    xstar(:,i+1) = xstar(:,i) + (1/6)*(k_1+2*k_2+2*k_3+k_4)*dx;  
 end
-save([dataPath,'ControlConstraints_Xstar','.mat'], 'Xstar','-v7.3')
+save([dataPath,'xstar','.mat'], 'xstar','-v7.3')
 
 
 % %% Plotting the results
