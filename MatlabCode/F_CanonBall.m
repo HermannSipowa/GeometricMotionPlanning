@@ -24,14 +24,13 @@ mass = Spacecraft.M+Spacecraft.m;
 Pcrp = 1357/(299792458); % Solar pressure
 AU = 149597870.7; % Distance between Earth and Sun (in Km)
 gamma = (Cr*area)/mass;
+beta = -Pcrp * AU^2 * gamma /1000;
 
 JulianDay = JD+t/86400;
 [XS, Vs, ~] = Ephem(JulianDay,3,'EME2000');
 Vs = -Vs;
 XS = -XS;
 Xrel = XS - X(1:3,:);
-
-beta = -Pcrp * AU^2 * gamma /1000;
 
 acc =  beta * Xrel/ norm(Xrel)^3;
 

@@ -11,11 +11,11 @@ close all
 clear all
 clc
 start_up
+system('caffeinate -dims &')
 options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-20);
 global X0 Xf Mass g Penalty tMin tMax rMin rMax ...
        tClearance rClearance z1 z2 rr Alpha
-tmax    = 3.2;     % Integration time for PDE
-xmax    = 5;
+tmax    = 2;     % Integration time for PDE
 tpoints = 2000;    % Number of points in the time discretization
 xpoints = 2000;    % Number of points in the spcial discretization
 % dx      = 5E-3;
@@ -27,7 +27,7 @@ Penalty = 5E5;    % Penalty for moving in unfeasible/constrained directions
 X0      = [7 -4*pi/9 -0.5 -0.01]'; % Initial state
 Xf      = [9 pi/3 0 0]'; % Final state
 m       = 0; % Integrator parameter (due to cartesian coordinates)
-x       = linspace(0,xmax,xpoints); % discretization of the curve
+x       = linspace(0,1,xpoints); % discretization of the curve
 t       = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of time 
 tMin    = -pi/2;
 tMax    = pi/2;

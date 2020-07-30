@@ -69,7 +69,7 @@ Ccen = (2*e - e^3/4 + 5/96*e^5)*sin(M) + (5/4*e^2 - 11/24*e^4)*sin(2*M) + ...
 nu = M + Ccen;
 
 COE = [a,e,inc,W,w,nu];
-[R, V] = COEstoRV(COE,mu_s);
+[R, V] = COEstoRV_TrueAnomaly(COE,mu_s);
 
 % Convert to EME2000 if necessary
 if strcmpi(Frame,'EME2000')

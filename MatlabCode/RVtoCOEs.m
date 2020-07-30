@@ -33,7 +33,7 @@ if e_vec(3)<0
     Little_Omega = 2*pi-Little_Omega;
 end
 
-Nu=acos(dot(e_vec,r)/(norm(e_vec)*norm(r))); % True Anomaly
+Nu = real(acos(dot(e_vec,r)/(norm(e_vec)*norm(r)))); % True Anomaly
 if dot(r,v)<0
     Nu = 2*pi-Nu;
 end

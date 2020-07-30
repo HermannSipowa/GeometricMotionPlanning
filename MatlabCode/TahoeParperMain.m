@@ -6,380 +6,142 @@
 % 4. Extract the controls from sol(tpoints,:,:)
 % 5. Simulate the motion of unicycle using extracted controls
 %--------------------------------------------------------------------------
+global Xrel0 Xrelf Penalty ae mu_Earth ...
+       JD AU Target Chasser X_chief ...
+       IntTime tspan
+tmax     = 10;      % Integration time for PDE
+tpoints  = 2000;   % Number of points in the time discretization
+h        = 0.01;   % Step-size of integration[s]
+m        = 0;      % Integrator parameter (due to cartesian coordinates)\
+space    = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of the curve
+Penalty  = 1E4;    % Penalty for moving in unfeasible/constrained directions
+ae       = 6378.136;
+mu_Earth = 3.986004415E5;
+JD       = 2456296.25;
+AU       = 149597870.7;
+Chasser  = Spacecraft([30 30 4 116 40 0.9 0.9 3000 6000]); % Describing the Deputy sailcraft characteristic (refer Spacecraft class definition)
+Target   = Spacecraft([10 6 2 40 10 0.2 0.5 6 12]);         % Describing the Chief sailcraft characteristic (refer Spacecraft class definition)
 
-close all
-clear all
-clc
-start_up
-options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-20);
-global X0 Xf Mass g Penalty tMin tMax rMin rMax ...
-       tClearance rClearance z1 z2 rr Alpha
-tmax    = 2;     % Integration time for PDE
-tpoints = 2000;    % Number of points in the time discretization
-xpoints = 2000;    % Number of points in the spcial discretization
-% dx      = 5E-3;
-% x       = 0:dx:1;
-Mass    = 2;      % Mass of the ball
-g       = 9.80;   % Gravitational acceleration
-Alpha   = 1E5;
-Penalty = 5E5;    % Penalty for moving in unfeasible/constrained directions
-X0      = [7 -4*pi/9 -0.5 -0.01]'; % Initial state
-Xf      = [9 pi/3 0 0]'; % Final state
-m       = 0; % Integrator parameter (due to cartesian coordinates)
-x       = linspace(0,1,xpoints); % discretization of the curve
-t       = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of time 
-tMin    = -pi/2;
-tMax    = pi/2;
-rMin    = 3;
-rMax    = 10;
-z1      = [7; -pi/4]; % Location of obstacle 1
-z2      = [8; pi/5];  % Location of obstacle 2
-rr      = 0.75;        % Radius of the obstacles
-c1      = rgb('RosyBrown'); c2 = rgb('Black'); c3 = rgb('Lime');
-c4      = rgb('Tomato'); c5 = rgb('DarkBlue'); c6 = rgb('LightSlateGray');
-tClearance = pi/36;
-rClearance = 0.3;
+%% Target initial conditions(Orbital Elements)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+a1      = 1.5E+4; % Semi-major axis in Km
+e1      = 0.0;    % Eccentricity
+inc1    = 45;     % Inclination in deg0
+BigOmg1 = 20;     % RAAN in deg
+LitOmg1 = 90;     % AOP in deg
+M1      = 0;      % Mean anomaly in deg
 
+% Setting the integrator parameters
+Period  = 2*pi*sqrt(a1^3/mu_Earth);
+IntTime = Period;
+tspan   = linspace(0,IntTime,10000);
+options = odeset('RelTol',2.22045e-13,'AbsTol',2.22045e-30);
+
+% Constructing the chief inital conditions from the chief's OEs
+inc1 = deg2rad(inc1); BigOmg1 = deg2rad(BigOmg1); LitOmg1 = deg2rad(LitOmg1); M1 = deg2rad(M1);
+COE_c = [a1,e1,inc1,BigOmg1,LitOmg1,M1];
+[Position_target,Velocity_target]  = COEstoRV_MeanAnonaly(COE_c,mu_Earth,1);
+X0_chief = [Position_target; Velocity_target];
+
+% integrting the chief/reference trajectory
+[~, X_chief] = ode113(@(t,X)ChiefMotionODE(t,X,Target),tspan,X0_chief,options);
+
+TN = DCM(Position_target,Velocity_target); rt_norm = norm(Position_target);
+h_vec = cross(Position_target,Velocity_target); h_norm = norm(h_vec);
+eh = h_vec/h_norm;
+U_eci_Target  = F_CanonBall(tspan(1),Position_target,Target); % SRP force on the Target
+N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Position_target/h_norm;
+
+%% Chaser initial conditions(Orbital Elements)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+a2      = a1+10;        % Semi-major axis in Km
+e2      = e1+1e-3;      % Eccentricity
+inc2    = inc1 + 0.001; % Inclination in deg
+BigOmg2 = BigOmg1;      % RAAN in deg
+LitOmg2 = LitOmg1;      % AOP in deg
+M2      = M1;           % True anomaly in rad
+
+% Constructing the deputy inital conditions from the deputy's OEs
+inc2 = deg2rad(inc2); BigOmg2 = deg2rad(BigOmg2); LitOmg2 = deg2rad(LitOmg2); M2 = deg2rad(M2);
+COE_d = [a2,e2,inc2,BigOmg2,LitOmg2,M2];
+[Position_chaser0,Velocity_chaser0]  = COEstoRV_MeanAnonaly(COE_d,mu_Earth,1);
+qr_chasser0 = [1 1 1 9]';
+qr_chasser0 =  qr_chasser0/norm(qr_chasser0);
+Omega_chaser0 = 0.2*[deg2rad(-.5) deg2rad(.4) deg2rad(.1)]'; % Angular velocity in inertial frame
+CN = Quaternion_to_DCM(qr_chasser0); Omega_chaser_B0 = CN*Omega_chaser0;
+NR_rel0 = Position_chaser0 - Position_target; NV_rel0 = Velocity_chaser0 - Velocity_target;
+TR_rel0 = TN*NR_rel0; TV_rel0 = TN*(NV_rel0 - cross(N_nudot,NR_rel0));
+Xrel0 = [qr_chasser0; Omega_chaser_B0; TR_rel0; TV_rel0];
+
+%% Desired trajectory initial conditions(Orbital Elements)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+a3      = a1;           % Semi-major axis in Km
+e3      = e1 + .4/a1;   % Eccentricity
+inc3    = inc1;         % Inclination in deg
+BigOmg3 = BigOmg1;      % RAAN in deg
+LitOmg3 = LitOmg1;      % AOP in deg
+M3      = M1;           % True anomaly in rad
+
+% Constructing the deputy final conditions from the deputy's OEs
+inc3 = deg2rad(inc3) + .6/a1; BigOmg3 = deg2rad(BigOmg3); LitOmg3 = deg2rad(LitOmg3); M3 = deg2rad(M3);
+COE_r = [a3,e3,inc3,BigOmg3,LitOmg3,M3];
+[Position_Desired,Velocity_Desired]  = COEstoRV_MeanAnonaly(COE_r,mu_Earth,1);
+qr_chasserf = [1 0 0 0]';
+qr_chasserf = qr_chasserf/norm(qr_chasserf);
+Omega_chaserf = zeros(3,1);
+CN = Quaternion_to_DCM(qr_chasserf); Omega_chaser_Bf = CN*Omega_chaserf;
+NR_relf = Position_Desired - Position_target; NV_relf = Velocity_Desired - Velocity_target;
+TR_relf = TN*NR_relf; TV_relf = TN*(NV_relf - cross(N_nudot,NR_relf));
+Xrelf = [qr_chasserf; Omega_chaser_Bf; TR_relf; TV_relf];
 
 %% Solving the Geodesic (Parabolic PDE, the solution is of form sol(t,x,u)
-tStart = tic;
-sol = pdepe(m,@mypendulumpde,@mypdexic,@mypdexbc,x,t); 
-tEnd = toc(tStart);
-fprintf('%d minutes and %f seconds\n', floor(tEnd/60), rem(tEnd,60));
-u1 = sol(:,:,1); % radius r
-u2 = sol(:,:,2); % angle theta
-u3 = sol(:,:,3); % raduis rate rdot
-u4 = sol(:,:,4); % angular rate thetadot
+sol = pdepe(m,@TahoePDE,@TahoeIC,@TahoeBC,tspan,space);
 
 %%  Extract Controls
-ctrl      = zeros(2,length(x));
-[p1, dp1] = pdeval(m,x,sol(end,:,1),x);
-[p2, dp2] = pdeval(m,x,sol(end,:,2),x);
-[p3, dp3] = pdeval(m,x,sol(end,:,3),x);
-[p4, dp4] = pdeval(m,x,sol(end,:,4),x);
-
-for i = 1:length(x)
-    r         = p1(i);
-    theta     = p2(i);
-    rdot      = p3(i);
-    thetadot  = p4(i);
-    Fbar      = [1 0 0 0; 0 1 0 0; 0 0 1/Mass 0; 0 0 0 1/(r*Mass)];
-    Xdot      = [dp1(i) dp2(i) dp3(i) dp4(i)]';
-    fd        = [rdot; thetadot; r*thetadot^2 + g*cos(theta)/Mass;
-                 -2*rdot*thetadot/r + g*sin(theta)/(Mass*r)];
-    ctrl(:,i) = [zeros(2) eye(2)]/Fbar*(Xdot-fd);
+n = length(Aug_chasser_Xo);
+m = length(tspan);
+Tau_ctrl  = zeros(2,m);
+[~, Xdot] = pdeval(m,tspan,sol(end,:,n),tspan);
+for i = 1:m
+    Iinv = inv(diag(Chasser.Moment_Of_Inertia_Calculator()));
+    Fbar = eye(n);
+    Fbar(:,1) = [u(1:4);zeros(9,1)];
+    Fbar(:,5:7) = [zeros(10,3);eye(3)];
+    Fbar(:,11:end) = [zeros(4,3);Iinv;zeros(6,3)];
+    X_aug = [X_chief; sol(end,i,:)];
+    fd    = RelativeMotionODE(i,X_aug,Target,Chasser);
+    Tau_ctrl(:,i) = [zeros(3,10) eye(3)]/Fbar*(Xdot(i,:)-fd);
 end
-
 
 %% Find x^* by integrating ODE
-n          = size(X0,1);
-xstar      = zeros(n,length(x));
-xstar(:,1) = [p1(1);p2(1);p3(1);p4(1)];
-F_xy       = @(t,X,U) Dynamics(t,X,U);
-
-for i = 1:(length(x)-1)
-    dx = x(i+1) - x(i);
-    k_1 = F_xy(x(i),xstar(:,i),ctrl(:,i));
-    k_2 = F_xy(x(i)+0.5*dx,xstar(:,i)+0.5*dx*k_1,ctrl(:,i));
-    k_3 = F_xy((x(i)+0.5*dx),(xstar(:,i)+0.5*dx*k_2),ctrl(:,i));
-    k_4 = F_xy((x(i)+dx),(xstar(:,i)+k_3*dx),ctrl(:,i));
-    
-    xstar(:,i+1) = xstar(:,i) + (1/6)*(k_1+2*k_2+2*k_3+k_4)*dx;  
+Statestar = zeros(m,n);
+tol = 1E-11;
+Statestar(1,:) = X0_chasser;
+for ii = 1:(m-1)
+    [Statestar_f, out, h_next] = Runge_Kutta_Fehlberg_4_5(...
+        @(t,Aug_X)my2Bodyfunc(t,Aug_X,Tau_ctrl,Target,Chasser),...
+        Statestar(ii,:)',tspan(ii),h,tspan(ii+1),tol);
+    h = h_next;
+    Statestar(ii+1,:) = Statestar_f;
 end
 
-
-%% Plotting the results
-% plotting the configuration manifold
+%% Saving results
 %-------------------------------------------
-[r,th] = meshgrid(0:.1:11,0:pi/30:(2*pi));
-z_coord     = r;
-x_coord  = r.*cos(th);
-y_coord  = r.*sin(th);
+dataPath = 'Outputs_Data/';
+tpointsCorase = 500;
+xpointsCorase = 500;
+Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
+Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
+[X,Y] = meshgrid(Tmesh,Xmesh);
 
-figure
-camroll(-90)
-hold on;
-contourf(x_coord,y_coord,z_coord,'edgecolor','none');
-axis off
-axis image
-colormap(flipud(cmap(c6,100,30,30)))
-
-% Delimiting the boundering of the reacheable subspace
-%-------------------------------------------
-rf  = linspace(rMin,rMax,50);
-x_f = rf.*cos(tMin);
-y_f = rf.*sin(tMin);
-p   = plot(x_f,y_f,'--');
-p.Color = c4;
-p.MarkerSize = 8;
-
-rf  = linspace(rMin,rMax,50);
-x_f = rf.*cos(tMax);
-y_f = rf.*sin(tMax);
-p   = plot(x_f,y_f,'--');
-p.Color = c4;
-p.MarkerSize = 8;
-
-rf  = rMax; angle = linspace(tMin,tMax,50);
-x_f = rf.*cos(angle);
-y_f = rf.*sin(angle);
-p   = plot(x_f,y_f,'--');
-p.Color = c4;
-p.MarkerSize = 8;
-
-rf  = rMin; angle = linspace(tMin,tMax,50);
-x_f = rf.*cos(angle);
-y_f = rf.*sin(angle);
-p   = plot(x_f,y_f,'--');
-p.Color = c4;
-
-% Plotting the obstacles in the configuration space
-%-------------------------------------------
-j = 0:0.1:2*pi;
-plot(z1(1).*cos(z1(2))+rr*cos(j),z1(1).*sin(z1(2))+rr*sin(j),'r:');
-plot(z2(1).*cos(z2(2))+rr*cos(j),z2(1).*sin(z2(2))+rr*sin(j),'r:');
-scatter(z1(1).*cos(z1(2)),z1(1).*sin(z1(2)),'r','filled');
-scatter(z2(1).*cos(z2(2)),z2(1).*sin(z2(2)),'r','filled');
-
-% Ploting the initial condition
-%-------------------------------------------
-r0 = X0(1); theta0 = X0(2);
-x_0 = r0.*cos(theta0);
-y_0 = r0.*sin(theta0);
-p   = plot(x_0,y_0);
-p.Color = 'magenta';
-p.Marker = '*';
-p.MarkerSize = 8;
-
-% Plotting the end condition
-%-------------------------------------------
-rf  = Xf(1); thetaf = Xf(2);
-x_f = rf.*cos(thetaf);
-y_f = rf.*sin(thetaf);
-p   = plot(x_f,y_f);
-p.Color = c4;
-p.Marker = '+';
-p.MarkerSize = 8;
-
-%%
-% Show homotopy in 2D with obstacles
-%-------------------------------------------
-r = u1(1,:); theta = u2(1,:);
-X_path = r.*cos(theta);
-Y_path = r.*sin(theta);
-h1 = plot(X_path,Y_path,'k:.','LineWidth',2);
-pause;
-
-for i=1:tpoints  
-    
-    r = u1(i,:); theta = u2(i,:);
-    X_path = r.*cos(theta); h1.XDataSource = 'X_path';
-    Y_path = r.*sin(theta); h1.YDataSource = 'Y_path';
-    
-    refreshdata(h1,'caller');
-    drawnow;
+for i = 1:length(X0)
+    data = sprintf('State%d', i);
+    udata = interp2(t,x,sol(:,:,i),X,Y);
+    save([dataPath,data,'.mat'], 'udata','-v7.3')
 end
-
-%%
-% Show homotopy in 2D with obstacles
-%-------------------------------------------
-r = xstar(1,1); theta = xstar(2,1);
-X_traj = r.*cos(theta);
-Y_traj = r.*sin(theta);
-h2 = plot(X_traj,Y_traj,'*','Color',c1,'LineWidth',2);
-pause;
-
-for i=1:length(x)
-    
-    r = xstar(1,i); theta = xstar(2,i);
-    X_traj = r.*cos(theta); h2.XDataSource = 'X_traj';
-    Y_traj = r.*sin(theta); h2.YDataSource = 'Y_traj';
-    
-    refreshdata(h2,'caller');
-    drawnow;
-end
-
-%%
-% Plotting the required control
-%-------------------------------------------
-figure
-subplot(2,1,1)
-plot(x,ctrl(1,:))
-subplot(2,1,2)
-plot(x,ctrl(2,:))
+Xstar = interp1(x,Statestar',X)';
+save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
+save([dataPath,data,'.mat'], 'u1','-v7.3')
 
 
 
-% ------------------------------------------------------------------------
-% The followings are the PDE, initial condition and boundary condition for
-% the Matlab commend pdepe:
-
-function [c,f,s] = mypendulumpde(x,t,u,DuDx)
-% Define PDE; Evaluate right-hand-side of GHF
-
-global Mass g Penalty tMin tMax rMin rMax ...
-    tClearance rClearance z1 z2 rr Alpha
-r        = u(1);
-theta    = u(2);
-rdot     = u(3);
-thetadot = u(4);
-
-%% Defining the Obstacle(s)
-Tmin = tMin + tClearance; % Minimum angle
-Tmax = tMax - tClearance; % Minimum angle
-Rmin = rMin + rClearance; % Minimum radius
-Rmax = rMax - rClearance; % Minimum radius
-R    = rr + rClearance; 
-tip  = [r.*cos(theta); r.*sin(theta)];
-obs1 = [z1(1).*cos(z1(2)); z1(1).*sin(z1(2))];
-obs2 = [z2(1).*cos(z2(2)); z2(1).*sin(z2(2))];
-l5   = norm(tip-obs1);
-l6   = norm(tip-obs2); 
-
-
-if l5>=R
-    lambda5  = 0;
-    plambda5 = zeros(4,1);
-else
-    lambda5  = Alpha*((l5^2-R^2)/l5^2)^2;
-    plambda5 = Alpha*4*R^2*(l5^2-R^2)/l5^6*[r-z1(1)*cos(theta-z1(2));
-                                      r*z1(1)*sin(theta-z1(2)); 0; 0];
-end
-
-if l6>=R
-    lambda6  = 0;
-    plambda6 = zeros(4,1);
-else
-    lambda6  = Alpha*((l6^2-R^2)/l6^2)^2;
-    plambda6 = Alpha*4*R^2*(l6^2-R^2)/l6^6*[r-z2(1)*cos(theta-z2(2));
-                                      r*z2(1)*sin(theta-z2(2)); 0; 0];
-end
-
-if theta>=Tmin
-    lambda1  = 0;
-    plambda1 = zeros(4,1);
-else
-    l1       = theta-Tmin;
-    lambda1  = Alpha*((l1^2-tClearance^2)/l1^2)^2;
-    plambda1 = Alpha*[0; 2*tClearance^2/(theta-Tmin)^3; 0; 0];
-end
-
-if theta<=Tmax
-    lambda2  = 0;
-    plambda2 = zeros(4,1);
-else
-    l2       = theta-Tmax;
-    lambda2  = Alpha*((l2^2-tClearance^2)/l2^2)^2;
-    plambda2 = Alpha*[0; 2*tClearance^2/(theta-Tmax)^3; 0; 0];
-end
-
-if r>=Rmin
-    lambda3  = 0;
-    plambda3 = zeros(4,1);
-else
-    l3       = r-Rmin;
-    lambda3  = Alpha*((l3^2-rClearance^2)/l3^2)^2;
-    plambda3 = Alpha*[2*rClearance^2/(r-Rmin)^3; 0; 0; 0];
-end
-
-if r<=Rmax
-    lambda4  = 0;
-    plambda4 = zeros(4,1);
-else
-    l4       = r-Rmax;
-    lambda4  = Alpha*((l4^2-rClearance^2)/l4^2)^2;
-    plambda4 = Alpha*[2*rClearance^2/(r-Rmax)^3; 0; 0; 0];
-end
-
-lambda  = 1 +lambda1+lambda2+lambda3+lambda4+lambda5+lambda6;
-plambda = plambda1+plambda2+plambda3+plambda4+plambda5+plambda6; 
-
-
-%% Definint the Metric
-H = [Penalty 0 0 0;
-     0 Penalty 0 0;
-     0 0 Mass^2  0;
-     0 0 0 (Mass*r)^2]; % Riemannian metric
-G = lambda*H;
-
-
-%% Partial derivatives of G
-pH_pr     = [zeros(3,4); 0, 0, 0, 2*r*Mass^2];
-pG(:,:,1) = plambda(1)*H + lambda*pH_pr; % pG_pr
-pG(:,:,2) = plambda(2)*H;                % pG_ptheta
-pG(:,:,3) = plambda(3)*H;                % pG_prdot
-pG(:,:,4) = plambda(4)*H;                % pG_pthetadot
-
-
-%% Evaluate christoffels symboles
-invG  = inv(G);
-n     = size(invG,1);
-Chris = zeros(size(pG));
-for i=1:n
-    for j=1:n
-        for k=1:n
-            for l=1:n
-                Chris(i,j,k) = Chris(i,j,k)...
-                               +1/2*invG(i,l)*(pG(l,j,k)...
-                               +pG(l,k,j)-pG(j,k,l));
-            end
-        end
-    end
-end
-
-
-%% fD and its partal derivative
-Fd = RelativeMotionODE(t, Xaug, Target, Chasser);
-pFd = Partial_Fd_Quaternion(t, Xaug, Target, Chasser);
-
-
-%% Computing the coeficients to the PDE
-s       = zeros(n,1);
-MatProd = zeros(n,1);
-for i = 1:n
-    MatProd(i) = (DuDx-Fd)'*pG(:,:,i)*Fd;
-end
-rvec = invG*(pFd'*G*(DuDx-Fd) + 1/2*MatProd);
-c = ones(n,1);
-f = DuDx-Fd;
-for i = 1:n
-    s(i) = (DuDx-Fd)'*squeeze(Chris(i,:,:))*(DuDx-Fd)+rvec(i);
-end
-
-end
-% --------------------------------------------------------------------------
-
-function u0 = mypdexic(x) % Initial condition for GHF
-global X0 Xf
-u0 = [X0(1) + (Xf(1)-X0(1))*sin(5*pi*x/2)
-      X0(2) + (Xf(2)-X0(2))*sin(pi*x/2);
-      X0(3)*cos(pi*x/2) + Xf(3)*sin(pi*x/2);
-      X0(4)*cos(pi*x/2) + Xf(4)*sin(pi*x/2)];
-
-end
-% --------------------------------------------------------------------------
-
-function [pl,ql,pr,qr] = mypdexbc(xl,ul,xr,ur,t) % Boundary condition for GHF
-global X0 Xf
-n  = size(X0);
-pl = ul - X0;
-ql = zeros(n);
-pr = ur - Xf;
-qr = zeros(n);
-end
-% --------------------------------------------------------------------------
-
-function [xdot] = Dynamics(t,X,U)
-global Mass g
-r        = X(1);
-theta    = X(2);
-rdot     = X(3);
-thetadot = X(4);
-fd = [rdot; thetadot; r*thetadot^2 + g*cos(theta)/Mass;
-      -2*rdot*thetadot/r + g*sin(theta)/(Mass*r)];
-f1 = [0; 0; 1/Mass; 0];
-f2 = [0; 0; 0; 1/(r*Mass)];
-
-xdot = fd + f1*U(1) + f2*U(2);
-
-end

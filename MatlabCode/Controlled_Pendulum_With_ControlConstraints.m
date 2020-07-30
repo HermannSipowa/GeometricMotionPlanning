@@ -19,12 +19,12 @@ global X0 Xf Mass g Penalty tMin tMax rMin rMax ...
        U1_max U2_max tmax xmax 
 tmax    = 3.2;     % Integration time for PDE
 xmax    = 5;
-tpoints = 1E4;   % Number of points in the time discretization
-xpoints = 1E4;   % Number of points in the spcial discretization
+tpoints = 1E5;    % Number of points in the time discretization
+xpoints = 1E5;    % Number of points in the spcial discretization
 % dx      = 5E-3;
 % x       = 0:dx:1;
-U1_max  = 10;
-U2_max  = 10;
+U1_max  = 100;
+U2_max  = 100;
 Mass    = 2;      % Mass of the ball
 g       = 9.80;   % Gravitational acceleration
 Alpha   = 1E4;
@@ -49,10 +49,9 @@ rClearance = 0.3;
 
 %% Solving the Geodesic (Parabolic PDE, the solution is of form sol(t,x,u)
 tStart = tic;
-Sol = pdepe(m,@MyPendulumControlContraints_pde,@MyPendulumControlContraints_ic,@MyPendulumControlContraints_bc,x,t); 
+sol = pdepe(m,@MyPendulumControlContraints_pde,@MyPendulumControlContraints_ic,@MyPendulumControlContraints_bc,x,t); 
 tEnd = toc(tStart);
 fprintf('%d minutes and %f seconds\n', floor(tEnd/60), rem(tEnd,60));
-save([dataPath,'ControlConstraints_Sol','.mat'], 'Sol','-v7.3')
 
 
 % u1 = sol(:,:,1); % radius r
@@ -99,12 +98,13 @@ for i = 1:(length(x)-1)
     
     Xstar(:,i+1) = Xstar(:,i) + (1/6)*(k_1+2*k_2+2*k_3+k_4)*dx;  
 end
-save([dataPath,'ControlConstraints_Xstar','.mat'], 'Xstar','-v7.3')
 
 
-% %% Plotting the results
-% tpointsCorase = 100;
-% xpointsCorase = 100;
+
+% %% Saving results
+% %-------------------------------------------
+% tpointsCorase = 500;
+% xpointsCorase = 500;
 % Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time 
 % Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
 % [X,Y] = meshgrid(Tmesh,Xmesh);
@@ -113,7 +113,20 @@ save([dataPath,'ControlConstraints_Xstar','.mat'], 'Xstar','-v7.3')
 % u2 = interp2(t,x,sol(:,:,2),X,Y); % angle theta
 % u3 = interp2(t,x,sol(:,:,3),X,Y); % raduis rate rdot
 % u4 = interp2(t,x,sol(:,:,4),X,Y); % angular rate thetadot
+% u5 = interp2(t,x,sol(:,:,5),X,Y); % control input 1
+% u6 = interp2(t,x,sol(:,:,6),X,Y); % control intput 2
+% Xstar = interp1(x,Xstar',X)';     % raduis rate rdot
 % 
+% save([dataPath,'u1','.mat'], 'u1','-v7.3')
+% save([dataPath,'u2','.mat'], 'u2','-v7.3')
+% save([dataPath,'u3','.mat'], 'u3','-v7.3')
+% save([dataPath,'u4','.mat'], 'u4','-v7.3')
+% save([dataPath,'u5','.mat'], 'u5','-v7.3')
+% save([dataPath,'u6','.mat'], 'u6','-v7.3')
+% save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
+
+% %% Ploting the results
+% %-------------------------------------------
 % figure
 % surf(X,Y,u1)
 % title('u1(t,s)')
