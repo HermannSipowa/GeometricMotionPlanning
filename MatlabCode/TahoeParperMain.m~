@@ -6,37 +6,26 @@
 % 4. Extract the controls from sol(tpoints,:,:)
 % 5. Simulate the motion of unicycle using extracted controls
 %--------------------------------------------------------------------------
-
-close all
 clear all
+close all
 clc
-start_up
-options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-20);
-global Xrel0 Xrelf Penalty Alpha ae ...
-    mu_Earth JD AU Target Chasser X_chief ...
-    IntegrationTime tspan
-
-c1      = rgb('RosyBrown'); c2 = rgb('Black'); c3 = rgb('Lime');
-c4      = rgb('Tomato'); c5 = rgb('DarkBlue'); c6 = rgb('LightSlateGray');
-tmax    = 2;      % Integration time for PDE
-tpoints = 2000;   % Number of points in the time discretization
-h       = 0.01;   % Step-size of integration[s]
-Penalty = 5E5;    % Penalty for moving in unfeasible/constrained directions
-Alpha   = 1E5;
-X0      = [7 -4*pi/9 -0.5 -0.01]'; % Initial state
-Xf      = [9 pi/3 0 0]'; % Final state
-m       = 0;      % Integrator parameter (due to cartesian coordinates)\
-space   = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of the curve
-tClearance = pi/36;
-rClearance = 0.3;
-ae = 6378.136;
+global Xrel0 Xrelf Penalty ae mu_Earth JD AU Target Chasser X_chief IntTime tspan
+tmax     = 100;    % Integration time for PDE
+tpoints  = 2000;   % Number of points in the time discretization
+m        = 0;      % Integrator parameter (due to cartesian coordinates)\
+space    = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of the curve
+Penalty  = 1E4;    % Penalty for moving in unfeasible/constrained directions
+ae       = 6378.136;
 mu_Earth = 3.986004415E5;
-JD = 2456296.25;
-AU = 149597870.7;
-Chasser = Spacecraft([30 30 4 116 40 0.9 0.9 3000 6000]); % Describing the Deputy sailcraft characteristic (refer Spacecraft class definition)
-Target = Spacecraft([10 6 2 40 10 0.2 0.5 6 12]); % Describing the Chief sailcraft characteristic (refer Spacecraft class definition)
+JD       = 2456296.25;
+AU       = 149597870.7;
+% Defining the spacecraft physical characteristic (Eefer Spacecraft class definition)
+Chasser  = Spacecraft([30 30 4 116 40 0.9 0.9 3000 6000]); 
+Target   = Spacecraft([10 6 2 40 10 0.2 0.5 6 12]);       
 
-%% Target initial conditions(Orbital Elements)
+%% Inital condition in Orbital Elements
+
+% Target initial conditions(Orbital Elements)
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a1      = 1.5E+4; % Semi-major axis in Km
 e1      = 0.0;    % Eccentricity
@@ -45,10 +34,31 @@ BigOmg1 = 20;     % RAAN in deg
 LitOmg1 = 90;     % AOP in deg
 M1      = 0;      % Mean anomaly in deg
 
-% Setting the integrator parameters
-Period = 2*pi*sqrt(a1^3/mu_Earth);
-IntegrationTime = Period;
-tspan  = linspace(0,IntegrationTime,10000);
+% Chaser initial conditions(Orbital Elements)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+a2      = a1+10;               % Semi-major axis in Km
+e2      = e1+1e-3;              % Eccentricity
+inc2    = inc1+2e-3;           % Inclination in deg
+BigOmg2 = BigOmg1;              % RAAN in deg
+LitOmg2 = LitOmg1;              % AOP in deg
+M2      = M1;                   % True anomaly in rad
+
+% Desired trajectory initial conditions(Orbital Elements)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+a3      = a1;           % Semi-major axis in Km
+e3      = e1+0.4/a1;   % Eccentricity
+inc3    = inc1;         % Inclination in deg
+BigOmg3 = BigOmg1;      % RAAN in deg
+LitOmg3 = LitOmg1;      % AOP in deg
+M3      = M1;           % True anomaly in rad
+
+
+%% Inital condition in coratesian corditnates
+
+% integrting the chief/reference trajectory
+Period  = 2*pi*sqrt(a1^3/mu_Earth);
+IntTime = Period;
+tspan   = linspace(0,IntTime,10000);
 options = odeset('RelTol',2.22045e-13,'AbsTol',2.22045e-30);
 
 % Constructing the chief inital conditions from the chief's OEs
@@ -56,8 +66,6 @@ inc1 = deg2rad(inc1); BigOmg1 = deg2rad(BigOmg1); LitOmg1 = deg2rad(LitOmg1); M1
 COE_c = [a1,e1,inc1,BigOmg1,LitOmg1,M1];
 [Position_target,Velocity_target]  = COEstoRV_MeanAnonaly(COE_c,mu_Earth,1);
 X0_chief = [Position_target; Velocity_target];
-
-% integrting the chief/reference trajectory
 [~, X_chief] = ode113(@(t,X)ChiefMotionODE(t,X,Target),tspan,X0_chief,options);
 
 TN = DCM(Position_target,Velocity_target); rt_norm = norm(Position_target);
@@ -65,14 +73,6 @@ h_vec = cross(Position_target,Velocity_target); h_norm = norm(h_vec);
 eh = h_vec/h_norm;
 U_eci_Target  = F_CanonBall(tspan(1),Position_target,Target); % SRP force on the Target
 N_nudot = h_vec/rt_norm^2 + dot(U_eci_Target,eh)*Position_target/h_norm;
-%% Chaser initial conditions(Orbital Elements)
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
-a2      = a1+10;        % Semi-major axis in Km
-e2      = e1+1e-3;      % Eccentricity
-inc2    = inc1 + 0.001; % Inclination in deg
-BigOmg2 = BigOmg1;      % RAAN in deg
-LitOmg2 = LitOmg1;      % AOP in deg
-M2      = M1;           % True anomaly in rad
 
 % Constructing the deputy inital conditions from the deputy's OEs
 inc2 = deg2rad(inc2); BigOmg2 = deg2rad(BigOmg2); LitOmg2 = deg2rad(LitOmg2); M2 = deg2rad(M2);
@@ -86,15 +86,6 @@ NR_rel0 = Position_chaser0 - Position_target; NV_rel0 = Velocity_chaser0 - Veloc
 TR_rel0 = TN*NR_rel0; TV_rel0 = TN*(NV_rel0 - cross(N_nudot,NR_rel0));
 Xrel0 = [qr_chasser0; Omega_chaser_B0; TR_rel0; TV_rel0];
 
-%% Desired trajectory initial conditions(Orbital Elements)
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
-a3      = a1;           % Semi-major axis in Km
-e3      = e1 + .4/a1;   % Eccentricity
-inc3    = inc1;         % Inclination in deg
-BigOmg3 = BigOmg1;      % RAAN in deg
-LitOmg3 = LitOmg1;      % AOP in deg
-M3      = M1;           % True anomaly in rad
-
 % Constructing the deputy final conditions from the deputy's OEs
 inc3 = deg2rad(inc3) + .6/a1; BigOmg3 = deg2rad(BigOmg3); LitOmg3 = deg2rad(LitOmg3); M3 = deg2rad(M3);
 COE_r = [a3,e3,inc3,BigOmg3,LitOmg3,M3];
@@ -107,150 +98,220 @@ NR_relf = Position_Desired - Position_target; NV_relf = Velocity_Desired - Veloc
 TR_relf = TN*NR_relf; TV_relf = TN*(NV_relf - cross(N_nudot,NR_relf));
 Xrelf = [qr_chasserf; Omega_chaser_Bf; TR_relf; TV_relf];
 
-
 %% Solving the Geodesic (Parabolic PDE, the solution is of form sol(t,x,u)
-sol = pdepe(m,@mypendulumpde,@mypdexic,@mypdexbc,tspan,space);
+tic
+sol = pdepe(m,@TahoePDE,@TahoeIC,@TahoeBC,tspan,space);
+toc
 
 %%  Extract Controls
-n = length(Aug_chasser_Xo);
-m = length(tspan);
-Tau_ctrl  = zeros(2,m);
-[~, Xdot] = pdeval(m,tspan,sol(end,:,n),tspan);
-for i = 1:m
+n = length(Xrel0);
+nn = length(tspan);
+Tau_ctrl  = zeros(3,nn);
+X = zeros(n,nn);
+Xdot = zeros(n,nn);
+for i = 1:n
+    [X(i,:), Xdot(i,:)] = pdeval(m,tspan,sol(end,:,i),tspan);
+end
+for i = 1:nn
     Iinv = inv(diag(Chasser.Moment_Of_Inertia_Calculator()));
-    Fbar = eye(n);
-    Fbar(:,1) = [u(1:4);zeros(9,1)];
-    Fbar(:,5:7) = [zeros(10,3);eye(3)];
-    Fbar(:,11:end) = [zeros(4,3);Iinv;zeros(6,3)];
-    X_aug = [X_chief; sol(end,i,:)];
-    fd    = RelativeMotionODE(i,X_aug,Target,Chasser);
-    Tau_ctrl(:,i) = [zeros(3,10) eye(3)]/Fbar*(Xdot(i,:)-fd);
+    fd   = RelativeMotionODE(i,X(:,i),Target,Chasser);
+    Fbar = [zeros(4,3);Iinv;zeros(6,3)];
+    Tau_ctrl(:,i) = (Fbar'*Fbar)\Fbar'*(Xdot(:,i)-fd);
 end
 
 %% Find x^* by integrating ODE
-Statestar = zeros(m,n);
-tol = 1E-11;
-Statestar(1,:) = X0_chasser;
-for ii = 1:(m-1)
-    [Statestar_f, out, h_next] = Runge_Kutta_Fehlberg_4_5(...
-        @(t,Aug_X)my2Bodyfunc(t,Aug_X,Tau_ctrl,Target,Chasser),...
-        Statestar(ii,:)',tspan(ii),h,tspan(ii+1),tol);
-    h = h_next;
-    Statestar(ii+1,:) = Statestar_f;
-end
-
+tic
+[~, Xstar_f] = ode113(@(t,Aug_X)ControlledRelativeMotionODE(t,Aug_X,Tau_ctrl,Target,Chasser),tspan,Xrel0,options);
+toc
 %% Saving results
 %-------------------------------------------
-dataPath = 'Outputs_Data/';
-tpointsCorase = 500;
-xpointsCorase = 500;
-Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
-Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
-[X,Y] = meshgrid(Tmesh,Xmesh);
+% dataPath = 'Outputs_Data/';
+% tpointsCorase = 500;
+% xpointsCorase = 500;
+% Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
+% Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
+% [X,Y] = meshgrid(Tmesh,Xmesh);
+% 
+% for i = 1:length(X0)
+%     data = sprintf('State%d', i);
+%     udata = interp2(t,x,sol(:,:,i),X,Y);
+%     save([dataPath,data,'.mat'], 'udata','-v7.3')
+% end
+% Xstar = interp1(x,Xstar_f',X)';
+% save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
+% save([dataPath,data,'.mat'], 'u1','-v7.3')
 
-for i = 1:length(X0)
-    data = sprintf('State%d', i);
-    udata = interp2(t,x,sol(:,:,i),X,Y);
-    save([dataPath,data,'.mat'], 'udata','-v7.3')
-end
-Xstar = interp1(x,Statestar',X)';
-save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
-save([dataPath,data,'.mat'], 'u1','-v7.3')
-
-
-
-
-
-% ------------------------------------------------------------------------
-% The followings are the PDE, initial condition and boundary condition for
-% the Matlab commend pdepe:
-
-function [c,f,s] = mypendulumpde(x,t,u,DuDx)
-% Define PDE; Evaluate right-hand-side of GHF
-
-global Target Chasser Penalty
-n = size(u,1);
-
-%% Defining the Obstacle(s)
-lambda  = 1;
-plambda = zeros(1,n);
-
-
-%% Definint the Riemannian Metric
-Iinv = inv(diag(Chasser.Moment_Of_Inertia_Calculator()));
-F = eye(n);
-F(:,1) = [u(1:4);zeros(9,1)];
-F(:,5:7) = [zeros(10,3);eye(3)];
-F(:,11:end) = [zeros(4,3);Iinv;zeros(6,3)];
-D = diag([Penalty*ones(10,1);ones(3,1)]);
-H = (F')\D/F;
-G = lambda*H;
-
-
-%% Partial derivatives of G
-pH_pq0 = [1; zeros(12,1)];
-pH_pq1 = [0; 1; zeros(11,1)];
-pH_pq2 = [0; 0; 1; zeros(10,1)];
-pH_pq3 = [0; 0; 0; 1; zeros(9,1)];
-for i = 1:n
-pG(:,:,i) = plambda(i)*H;
-end
-pG(:,:,1) = pG(:,:,1) + lambda*pH_pq0; % pG_pq0
-pG(:,:,2) = pG(:,:,2) + lambda*pH_pq1; % pG_pq1
-pG(:,:,3) = pG(:,:,3) + lambda*pH_pq2; % pG_pq2
-pG(:,:,4) = pG(:,:,4) + lambda*pH_pq3; % pG_pq3
-
-
-%% Evaluate christoffels symboles
-invG  = inv(G);
-Chris = zeros(size(pG));
-for i=1:n
-    for j=1:n
-        for k=1:n
-            for l=1:n
-                Chris(i,j,k) = Chris(i,j,k)...
-                    +1/2*invG(i,l)*(pG(l,j,k)...
-                    +pG(l,k,j)-pG(j,k,l));
-            end
-        end
+%% Visualizing the results
+%-------------------------------------------
+for k = 1
+    close all
+    clc
+    start_up
+    c1 = rgb('Black'); c2 = rgb('Cyan'); c3 = rgb('Goldenrod');
+    c4 = rgb('RosyBrown'); c5 = rgb('DarkBlue'); c6 = rgb('DarkTurquoise');
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~% sol(end,:,i)
+    % Plotting the 3D homotopies
+    figure('Renderer', 'painters', 'Position', [15 15 900 600])
+    h1 = plot3(sol(1,:,8),sol(1,:,9),sol(1,:,10),'r');
+    hold on
+    h2 = plot3(sol(1,1,8),sol(1,1,9),sol(1,1,10),'o','color', c2,...
+        'LineWidth',2,...
+        'MarkerEdgeColor',c2,...
+        'MarkerFaceColor',c2,...
+        'MarkerSize',5);
+    h3 = plot3(sol(1,end,8),sol(1,end,9),sol(1,end,10),'go',...
+        'LineWidth',2,...
+        'MarkerEdgeColor','k',...
+        'MarkerFaceColor',c1,...
+        'MarkerSize',5);
+    h5 = plot3(0,0,0,'bo',...
+        'LineWidth',2,...
+        'MarkerEdgeColor','k',...
+        'MarkerFaceColor',c5,...
+        'MarkerSize',15);
+    %arrow3D([.5e4,.5e4,.5e4] ,8e3*XSUN_LVLH,c3)
+    h = legend([h1, h5, h2, h3],{'Relative','chief','$\delta X_0$','$\delta X_f$'});
+    xlabel('X [km]')
+    ylabel('Y [km]')
+    zlabel('Z [km]')
+    for i=1:tpoints
+        X = sol(i,:,8) ;h1.XDataSource='X';
+        Y = sol(i,:,9) ;h1.YDataSource='Y';
+        Z = sol(i,:,10) ;h1.ZDataSource='Z';
+        
+        refreshdata(h1,'caller');
+        drawnow;
+        
     end
-end
-
-
-%% fD and its partal derivative
-Fd  = RelativeMotionODE(x,u,Target,Chasser);
-pFd = Partial_Fd_Quaternion(x,u,Target,Chasser); % Still to be changed 
-
-
-%% Computing the coeficients to the PDE
-s       = zeros(n,1);
-MatProd = zeros(n,1);
-for i = 1:n
-    MatProd(i) = (DuDx-Fd)'*pG(:,:,i)*Fd;
-end
-rvec = invG*(pFd'*G*(DuDx-Fd) + 1/2*MatProd);
-c = ones(n,1);
-f = DuDx-Fd;
-for i = 1:n
-    s(i) = (DuDx-Fd)'*squeeze(Chris(i,:,:))*(DuDx-Fd)+rvec(i);
-end
-
-end
-% --------------------------------------------------------------------------
-
-function u0 = mypdexic(x) % Initial condition for GHF
-global Xrel0 Xrelf IntegrationTime
-u0 = Xrel0 + (Xrelf-Xrel0)*sin(pi*x/(2*IntegrationTime));
-end
-% --------------------------------------------------------------------------
-
-function [pl,ql,pr,qr] = mypdexbc(xl,ul,xr,ur,t) % Boundary condition for GHF
-global Xrel0 Xrelf
-n  = size(Xrel0);
-pl = ul - Xrel0;
-ql = zeros(n);
-pr = ur - Xrelf;
-qr = zeros(n);
-end
-% --------------------------------------------------------------------------
+    
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the 3D trajectory
+    for ii =1
+        c1 = rgb('Crimson'); c2 = rgb('DarkSlateGray');
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        for kk = 1:4
+            subplot(2,2,kk)
+            for jj=1
+                h1 = plot3(Xstar_f(:,8),Xstar_f(:,9),Xstar_f(:,10),'r');
+                hold on
+                h2 = plot3(Xstar_f(1,8),Xstar_f(1,9),Xstar_f(1,10),'ko','color', c3,...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','b',...
+                    'MarkerFaceColor',c3,...
+                    'MarkerSize',5);
+                h3 = plot3(Xstar_f(end,8),Xstar_f(end,9),Xstar_f(end,10),'go',...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','k',...
+                    'MarkerFaceColor',c1,...
+                    'MarkerSize',5);
+                h5 = plot3(0,0,0,'bo',...
+                    'LineWidth',2,...
+                    'MarkerEdgeColor','k',...
+                    'MarkerFaceColor',c2,...
+                    'MarkerSize',15);
+                % arrow3D([.5e4,.5e4,.5e4] ,8e3*XSUN_LVLH,c3)
+                h = legend([h1, h5, h2, h3],{'Relative','chief','$\delta X_0$','$\delta X_f$'});
+                rect = [0.43, 0.435, 0.125, 0.12];
+                set(h, 'Position', rect)
+                box on
+                grid on
+                xlabel('X [km]')
+                ylabel('Y [km]')
+                zlabel('Z [km]')
+            end
+            
+            if kk == 1
+                view(70,10)
+            elseif kk==2
+                view(0,90)  % XY
+            elseif kk==3
+                view(0,0)   % XZ
+            else
+                view(90,0)  % YZ
+            end
+            
+        end
+        sgt = sgtitle('Relative Trajectory','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the difference between ECI Cartesian coordinates of the deputy
+    for jj=1
+        
+        DQ1 = [Xstar_f(:,8) Xstar_f(:,11) Xstar_f(:,9) Xstar_f(:,12) Xstar_f(:,10) Xstar_f(:,13)];
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\delta x [km]$',...
+            '$\delta \dot{x} [km/s]$',...
+            '$\delta y [km]$',...
+            '$\delta \dot{y} [km/s]$',...
+            '$\delta z [km]$',...
+            '$\delta \dot{z} [km/s]$'};
+        for i=1:6
+            subplot(3,2,i)
+            plot1 = plot(tspan/86400,DQ1(:,i),'color', c4);
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+        end
+        sgt = sgtitle('Relative Position','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    
+    for jj=1
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\tau_{_{\!1}}$','$\tau_{_{\!2}}$','$\tau_{_{\!3}}$'};
+        for i=1:3
+            subplot(3,2,i)
+            plot(tspan/86400,Tau_ctrl(i,:),'color', c6)
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Acceleration and Torque on the Flat-Plate','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    
+    for jj=1
+        Q1 = Xstar_f(:,1:4);
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$q_{_{\!1}}$','$q_{_{\!2}}$','$q_{_{\!3}}$','$q_{_{\!4}}$'};
+        for i=1:4
+            subplot(2,2,i)
+            plot(tspan/86400,Q1(:,i),'color', c5) % -Q2(:,i)
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Deputy Attitude (Quaternions)','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    % Plotting the angular velocy
+    for jj=1
+        Q2 = Xstar_f(:,5:7);
+        figure('Renderer', 'painters', 'Position', [15 15 900 600])
+        YLabel={'$\omega_{_{\!1}}$','$\omega_{_{\!2}}$','$\omega_{_{\!3}}$'};
+        for i=1:3
+            subplot(3,1,i)
+            % plot(time/86400,omega_chasser1(:,i)-omega_target1(:,i))
+            plot(tspan/86400,Q2(:,i),'color', c5)
+            ylabel(YLabel(i))
+            xlabel('days')
+            grid on
+            % legend('Classical Dynamics', 'Dual Quaternions')
+        end
+        sgt = sgtitle('Deputy Angular Velocity','interpreter','tex');
+        sgt.FontSize = 30;
+    end
+    
+end % Plots for relative motions (Chaser and Target) with classical dynamics
 

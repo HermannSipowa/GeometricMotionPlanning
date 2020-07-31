@@ -31,7 +31,7 @@ Omega_matrix_Chasser = [0 -Omega_Chasser_body(1) -Omega_Chasser_body(2) -Omega_C
                         Omega_Chasser_body(3) Omega_Chasser_body(2) -Omega_Chasser_body(1) 0];
 
 qdot(1:4,:) = 1/2*Omega_matrix_Chasser*q_Chasser;
-Omega_dot(1:3,:) = I_Chasser\(-cross(Omega_Chasser_body,I_Chasser*Omega_Chasser_body) + ControlTorque);
+Omega_dot(1:3,:) = I_Chasser\(-cross(Omega_Chasser_body,I_Chasser*Omega_Chasser_body) + ControlTorque(:,idx));
 
 %***************************************%
 % Translational state differential equation
