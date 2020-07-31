@@ -124,22 +124,22 @@ tic
 [~, Xstar_f] = ode113(@(t,Aug_X)ControlledRelativeMotionODE(t,Aug_X,Tau_ctrl,Target,Chasser),tspan,Xrel0,options);
 toc
 %% Saving results
-%-------------------------------------------
-% dataPath = 'Outputs_Data/';
-% tpointsCorase = 500;
-% xpointsCorase = 500;
-% Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
-% Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
-% [X,Y] = meshgrid(Tmesh,Xmesh);
-% 
-% for i = 1:length(X0)
-%     data = sprintf('State%d', i);
-%     udata = interp2(t,x,sol(:,:,i),X,Y);
-%     save([dataPath,data,'.mat'], 'udata','-v7.3')
-% end
-% Xstar = interp1(x,Xstar_f',X)';
-% save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
-% save([dataPath,data,'.mat'], 'u1','-v7.3')
+-------------------------------------------
+dataPath = 'Outputs_Data/';
+tpointsCorase = 500;
+xpointsCorase = 500;
+Tmesh = [0 logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
+Xmesh = linspace(0,xmax,xpointsCorase); % discretization of the curve
+[X,Y] = meshgrid(Tmesh,Xmesh);
+
+for i = 1:length(X0)
+    data = sprintf('State%d', i);
+    udata = interp2(t,x,sol(:,:,i),X,Y);
+    save([dataPath,data,'.mat'], 'udata','-v7.3')
+end
+Xstar = interp1(x,Xstar_f',X)';
+save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
+save([dataPath,data,'.mat'], 'u1','-v7.3')
 
 %% Visualizing the results
 %-------------------------------------------
