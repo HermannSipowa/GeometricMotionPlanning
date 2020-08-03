@@ -24,6 +24,7 @@ F_body = F_SPR_FlatPlate(t, r_chasser, Chasser, q_Chasser); % F_CanonBall(t,r_ch
 
 %***************************************%
 % Rotational state differential equation
+thau_Chasser     = F_body(4:6,:);
 I_Chasser        = diag(Chasser.Moment_Of_Inertia_Calculator());
 Omega_matrix_Chasser = [0 -Omega_Chasser_body(1) -Omega_Chasser_body(2) -Omega_Chasser_body(3);
                         Omega_Chasser_body(1) 0 Omega_Chasser_body(3) -Omega_Chasser_body(2);
@@ -31,7 +32,8 @@ Omega_matrix_Chasser = [0 -Omega_Chasser_body(1) -Omega_Chasser_body(2) -Omega_C
                         Omega_Chasser_body(3) Omega_Chasser_body(2) -Omega_Chasser_body(1) 0];
 
 qdot(1:4,:) = 1/2*Omega_matrix_Chasser*q_Chasser;
-Omega_dot(1:3,:) = I_Chasser\(-cross(Omega_Chasser_body,I_Chasser*Omega_Chasser_body) + ControlTorque(:,idx));
+Omega_dot(1:3,:) = I_Chasser\(-cross(Omega_Chasser_body,I_Chasser*Omega_Chasser_body)...
+                    + thau_Chasser + ControlTorque(:,idx));
 
 %***************************************%
 % Translational state differential equation

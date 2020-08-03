@@ -1,6 +1,5 @@
 function [c,f,s] = TahoePDE(x,t,u,DuDx)
 % Define PDE; Evaluate right-hand-side of GHF
-
 global Target Chasser Penalty
 n = size(u,1);
 
@@ -34,16 +33,15 @@ pG(:,:,3) = pG(:,:,3) + lambda*pH_pq2; % pG_pq2
 pG(:,:,4) = pG(:,:,4) + lambda*pH_pq3; % pG_pq3
 
 
-%% Evaluate christoffels symboles
+%% Evaluate the christoffels symbols
 invG  = inv(G);
 Chris = zeros(size(pG));
 for i=1:n
     for j=1:n
         for k=1:n
             for l=1:n
-                Chris(i,j,k) = Chris(i,j,k)...
-                    +1/2*invG(i,l)*(pG(l,j,k)...
-                    +pG(l,k,j)-pG(j,k,l));
+                Chris(i,j,k) = Chris(i,j,k) + 1/2*invG(i,l)*(pG(l,j,k)...
+                                    + pG(l,k,j)-pG(j,k,l));
             end
         end
     end
@@ -52,7 +50,7 @@ end
 
 %% fD and its partal derivative
 Fd  = RelativeMotionODE(x,u,Target,Chasser);
-pFd = Partial_Fd_Quaternion(x,u,Target,Chasser); % Still to be changed 
+pFd = Partial_Fd_Quaternion(x,u,Target,Chasser);  
 
 
 %% Computing the coeficients to the PDE
