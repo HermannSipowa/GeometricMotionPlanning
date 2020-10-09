@@ -6,8 +6,14 @@
 % 4. Extract the controls from sol(tpoints,:,:)
 % 5. Simulate the motion of unicycle using extracted controls
 %--------------------------------------------------------------------------
+clear all
+close all 
+clc
+system('caffeinate -dims &');
 global Xrel0 Xrelf Penalty ae mu_Earth JD AU...
-    Target Chasser X_chief IntTime tspan Progress
+    Target Chasser X_chief IntTime tspan ...
+    Progress iteration sol
+iteration = 1;
 Progress = 0;
 ae       = 6378.136;
 mu_Earth = 3.986004415E5;
@@ -15,11 +21,12 @@ JD       = 2456296.25;
 AU       = 149597870.7;
 Chasser  = Spacecraft([100 50 4 116 40 0.9 0.9 3000 6000]); % Deputy characteristic
 Target   = Spacecraft([0 0 2 40 10 0.2 0.5 6 12]); % Target characteristic
-Penalty  = 1E5;  % Penalty for moving in unfeasible/constrained directions
-m        = 0;    % Integrator parameter (due to cartesian coordinates)
-S_Depth  = 1E3;  % Integration time for PDE
-S_Int    = 1E4;  % Number of points in the time discretization
+Penalty  = 1E5; % Penalty for moving in unfeasible/constrained directions
+m        = 0;   % Integrator parameter (due to cartesian coordinates)
+S_Depth  = 1E3; % Integration time for PDE
+S_Int    = 1E4; % Number of points in the time discretization
 Space    = linspace(0,S_Depth,S_Int); % Discretization of the curve
+dataPath = 'Outputs_Data/';
 
 %% Inital condition in Orbital Elements
 
@@ -27,24 +34,24 @@ Space    = linspace(0,S_Depth,S_Int); % Discretization of the curve
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a1      = 1.5E+4; % Semi-major axis in Km
 e1      = 0.1;    % Eccentricity
-inc1    = 45;     % Inclination in deg0
-BigOmg1 = 20;     % RAAN in deg
-LitOmg1 = 45;     % AOP in deg
+inc1    = 15;     % Inclination in deg0
+BigOmg1 = 90;     % RAAN in deg
+LitOmg1 = 15;     % AOP in deg
 M1      = 0;      % Mean anomaly in deg
 
 % Chaser initial conditions(Orbital Elements)
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a2      = a1+5;       % Semi-major axis in Km
-e2      = e1+1e-3;    % Eccentricity
-inc2    = inc1+2e-3;  % Inclination in deg
-BigOmg2 = BigOmg1+.1; % RAAN in deg
-LitOmg2 = LitOmg1+.1; % AOP in deg
+e2      = e1+6e-4;    % Eccentricity
+inc2    = inc1+3e-3;  % Inclination in deg
+BigOmg2 = BigOmg1+5e-3; % RAAN in deg
+LitOmg2 = LitOmg1; % AOP in deg
 M2      = M1;         % True anomaly in rad
 
 % Desired trajectory initial conditions(Orbital Elements)
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a3      = a1;        % Semi-major axis in Km
-e3      = e1+0.4/a1; % Eccentricity
+e3      = e1;        % Eccentricity (+0.4/a1)
 inc3    = inc1;      % Inclination in deg
 BigOmg3 = BigOmg1;   % RAAN in deg
 LitOmg3 = LitOmg1;   % AOP in deg
@@ -59,6 +66,13 @@ Period  = 2*pi*sqrt(a1^3/mu_Earth);
 IntTime = 1/2*Period;
 tspan   = linspace(0,IntTime,1E4);
 options = odeset('RelTol',2.22045e-13,'AbsTol',2.22045e-30);
+
+tpointsCorase = 100;
+xpointsCorase = 100;
+Tmesh = [0 logspace(-4,log10(S_Depth),tpointsCorase-1)]; % discretization of time
+Xmesh = linspace(0,IntTime,xpointsCorase); % discretization of the curve
+[X,Y] = meshgrid(Tmesh,Xmesh);
+tspanData = interp1(tspan,tspan,Xmesh); save([dataPath,'tspanData','.mat'], 'tspanData','-v7.3')
 
 % Constructing the chief inital conditions from the chief's OEs
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
@@ -87,9 +101,9 @@ NR_rel0 = Position_chaser0 - Position_target; NV_rel0 = Velocity_chaser0 - Veloc
 TR_rel0 = TN*NR_rel0; TV_rel0 = TN*(NV_rel0 - cross(N_nudot,NR_rel0));
 Xrel0 = [qr_chasser0; Omega_chaser_B0; TR_rel0; TV_rel0];
 
-% Constructing the deputy final conditions from the deputy's OEs
+% Constructing the deputy final conditions from the deputy's OEs (inc3 + 0.6/a1)
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
-inc3 = deg2rad(inc3) + .6/a1; BigOmg3 = deg2rad(BigOmg3); LitOmg3 = deg2rad(LitOmg3); M3 = deg2rad(M3);
+inc3 = deg2rad(inc3); BigOmg3 = deg2rad(BigOmg3); LitOmg3 = deg2rad(LitOmg3); M3 = deg2rad(M3);
 COE_r = [a3,e3,inc3,BigOmg3,LitOmg3,M3];
 [Position_Desired,Velocity_Desired]  = COEstoRV_MeanAnonaly(COE_r,mu_Earth,1);
 qr_chasserf = [1 0 0 0]';
@@ -102,57 +116,78 @@ Xrelf = [qr_chasserf; Omega_chaser_Bf; TR_relf; TV_relf];
 
 %% Solving the Geodesic (Parabolic PDE, the solution is of form sol(t,x,u)
 tic
-sol = pdepe(m,@TahoePDE,@TahoeIC,@TahoeBC,tspan,Space);
+options = odeset('RelTol',2.22045e-10,'AbsTol',2.22045e-15);
+for i = 1:10
+    iterationtime = linspace(0,5,1E4);
+    sol = pdepe(m,@TahoePDE,@TahoeIC,@TahoeBC,tspan,iterationtime);
+    
+    if i == 1
+        State1  = interp2(iterationtime,tspan,sol(:,:,1),X,Y);  save([dataPath,'State1.mat'], 'State1','-v7.3')
+        State2  = interp2(iterationtime,tspan,sol(:,:,2),X,Y);  save([dataPath,'State2.mat'], 'State2','-v7.3')
+        State3  = interp2(iterationtime,tspan,sol(:,:,3),X,Y);  save([dataPath,'State3.mat'], 'State3','-v7.3')
+        State4  = interp2(iterationtime,tspan,sol(:,:,4),X,Y);  save([dataPath,'State4.mat'], 'State4','-v7.3')
+        State5  = interp2(iterationtime,tspan,sol(:,:,5),X,Y);  save([dataPath,'State5.mat'], 'State5','-v7.3')
+        State6  = interp2(iterationtime,tspan,sol(:,:,6),X,Y);  save([dataPath,'State6.mat'], 'State6','-v7.3')
+        State7  = interp2(iterationtime,tspan,sol(:,:,7),X,Y);  save([dataPath,'State7.mat'], 'State7','-v7.3')
+        State8  = interp2(iterationtime,tspan,sol(:,:,8),X,Y);  save([dataPath,'State8.mat'], 'State8','-v7.3')
+        State9  = interp2(iterationtime,tspan,sol(:,:,9),X,Y);  save([dataPath,'State9.mat'], 'State9','-v7.3')
+        State10 = interp2(iterationtime,tspan,sol(:,:,10),X,Y); save([dataPath,'State10.mat'], 'State10','-v7.3')
+        State11 = interp2(iterationtime,tspan,sol(:,:,11),X,Y); save([dataPath,'State11.mat'], 'State11','-v7.3')
+        State12 = interp2(iterationtime,tspan,sol(:,:,12),X,Y); save([dataPath,'State12.mat'], 'State12','-v7.3')
+        State13 = interp2(iterationtime,tspan,sol(:,:,13),X,Y); save([dataPath,'State13.mat'], 'State13','-v7.3')
+    else
+        State1  = interp2(iterationtime,tspan,sol(:,:,1),X,Y);  save([dataPath,'State1.mat'], 'State1','-append','-v7.3')
+        State2  = interp2(iterationtime,tspan,sol(:,:,2),X,Y);  save([dataPath,'State2.mat'], 'State2','-append','-v7.3')
+        State3  = interp2(iterationtime,tspan,sol(:,:,3),X,Y);  save([dataPath,'State3.mat'], 'State3','-append','-v7.3')
+        State4  = interp2(iterationtime,tspan,sol(:,:,4),X,Y);  save([dataPath,'State4.mat'], 'State4','-append','-v7.3')
+        State5  = interp2(iterationtime,tspan,sol(:,:,5),X,Y);  save([dataPath,'State5.mat'], 'State5','-append','-v7.3')
+        State6  = interp2(iterationtime,tspan,sol(:,:,6),X,Y);  save([dataPath,'State6.mat'], 'State6','-append','-v7.3')
+        State7  = interp2(iterationtime,tspan,sol(:,:,7),X,Y);  save([dataPath,'State7.mat'], 'State7','-append','-v7.3')
+        State8  = interp2(iterationtime,tspan,sol(:,:,8),X,Y);  save([dataPath,'State8.mat'], 'State8','-append','-v7.3')
+        State9  = interp2(iterationtime,tspan,sol(:,:,9),X,Y);  save([dataPath,'State9.mat'], 'State9','-append','-v7.3')
+        State10 = interp2(iterationtime,tspan,sol(:,:,10),X,Y); save([dataPath,'State10.mat'], 'State10','-append','-v7.3')
+        State11 = interp2(iterationtime,tspan,sol(:,:,11),X,Y); save([dataPath,'State11.mat'], 'State11','-append','-v7.3')
+        State12 = interp2(iterationtime,tspan,sol(:,:,12),X,Y); save([dataPath,'State12.mat'], 'State12','-append','-v7.3')
+        State13 = interp2(iterationtime,tspan,sol(:,:,13),X,Y); save([dataPath,'State13.mat'], 'State13','-append','-v7.3')
+    end
+    iteration = iteration+1
+    Progress = 0;
+end
 toc
 
 %%  Extract Controls
 n = length(Xrel0);
 nn = length(tspan);
 Tau_ctrl  = zeros(3,nn);
-X = zeros(n,nn);
-Xdot = zeros(n,nn);
+Xst = zeros(n,nn);
+Xst_dot = zeros(n,nn);
 for i = 1:n
-    [X(i,:), Xdot(i,:)] = pdeval(m,tspan,sol(end,:,i),tspan);
+    [Xst(i,:), Xst_dot(i,:)] = pdeval(m,tspan,sol(end,:,i),tspan);
 end
 for i = 1:nn
     Iinv = inv(diag(Chasser.Moment_Of_Inertia_Calculator()));
-    fd   = RelativeMotionODE(i,X(:,i),Target,Chasser);
+    fd   = RelativeMotionODE(i,Xst(:,i),Target,Chasser);
     Fbar = [zeros(4,3);Iinv;zeros(6,3)];
-    Tau_ctrl(:,i) = (Fbar'*Fbar)\Fbar'*(Xdot(:,i)-fd);
+    Tau_ctrl(:,i) = (Fbar'*Fbar)\Fbar'*(Xst_dot(:,i)-fd);
 end
+Ctrl = interp1(tspan,Tau_ctrl',Xmesh)'; save([dataPath,'Ctrl','.mat'], 'Ctrl','-v7.3')
 
 %% Find x^* by integrating ODE
 tic
 [~, Xstar_f] = ode113(@(t,Aug_X)ControlledRelativeMotionODE(t,Aug_X,Tau_ctrl,Target,Chasser),tspan,Xrel0);
 toc
+Xstar = interp1(tspan,Xstar_f,Xmesh); save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
 
 %% Computing the uncontrolled trajectory
 tic
 [~, XUncontrolled] = ode113(@(t,Aug_X)RelativeMotionODE(t,Aug_X,Target,Chasser),tspan,Xrel0);
 toc
+XUnctrl = interp1(tspan,XUncontrolled,Xmesh); save([dataPath,'XUnctrl','.mat'], 'XUnctrl','-v7.3')
 
-%% Saving results
-%-------------------------------------------
-dataPath = 'Outputs_Data/';
-tpointsCorase = 1000;
-xpointsCorase = 1000;
-Tmesh = [0 logspace(-4,log10(S_Depth),tpointsCorase-1)]; % discretization of time
-Xmesh = linspace(0,IntTime,xpointsCorase); % discretization of the curve
-[X,Y] = meshgrid(Tmesh,Xmesh);
-for i = 1:length(Xrel0)
-    data = sprintf('State%d', i);
-    udata = interp2(Space,tspan,sol(:,:,i),X,Y);
-    save([dataPath,data,'.mat'], 'udata','-v7.3')
-end
 
-Xstar = interp1(tspan,Xstar_f,Xmesh);
-save([dataPath,'Xstar','.mat'], 'Xstar','-v7.3')
 
-XUnctrl = interp1(tspan,XUncontrolled,Xmesh);
-save([dataPath,'XUnctrl','.mat'], 'XUnctrl','-v7.3')
 
-Ctrl = interp1(tspan,Tau_ctrl',Xmesh)';
-save([dataPath,'Ctrl','.mat'], 'Ctrl','-v7.3')
+
 
 
 
