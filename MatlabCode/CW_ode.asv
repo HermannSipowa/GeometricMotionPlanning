@@ -1,10 +1,8 @@
 function [xdot] = CW_ode(t,x,u)
-% The EOM are nondimensionalization!!
 format long 
 global mu_dot Tc
 
 % Computing the CW control and dynamic matrices
-B = [zeros(3); eye(3)];
 A  = [zeros(3) eye(3);
     3*mu_dot^2 0 0 0 2*mu_dot 0;
     0 0 0 -2*mu_dot 0 0;
@@ -13,6 +11,6 @@ A  = [zeros(3) eye(3);
 % Reshaping the input into an 6 by n matrix
 [l,~] = size(x);
 x = reshape(x,6,l/6);
-xdot = A*x + B*u;
-xdot = xdot(:);
+Xdot = A*x + B*u;
+Xdot = Xdot(:);
 end

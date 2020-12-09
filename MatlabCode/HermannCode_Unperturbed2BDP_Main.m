@@ -135,7 +135,7 @@ Xf2 = AMap2*delCOE_4;
 % - CWode = Clohessy–Wiltshire, 
 % - THode = Tschauner-Hempel , 
 % - NLode = Full Nonlinear Model 
-DynamicsModel = 'THode';
+DynamicsModel = 'CWode';
 
 %% ------------------------ AutoDiff using CasADi -------------------------
 for j = 1
@@ -364,12 +364,12 @@ for ll = 1
     elseif strcmp(DynamicsModel,'CWode')
         T    = SimTime; % motion duration
         x    = linspace(0,T,xpoints); % discretization of the curve in time
-        xnew = linspace(0,T*Period,intgrids);
+        xnew = linspace(0,T,intgrids);
         
     elseif strcmp(DynamicsModel,'NLode')
         T    = SimTime; % motion duration
         x    = linspace(0,T,xpoints);
-        xnew = linspace(0,T*Period,intgrids);
+        xnew = linspace(0,T,intgrids);
         
     end
     
@@ -478,11 +478,25 @@ for ll = 1
             if strcmp(DynamicsModel,'THode')
                 Crtl_Aug = A_inv*[zeros(3,1); Crtl(jj).u(:,i)];
                 Dim_Crtl(jj).u(:,i) = Crtl_Aug(4:6);
+            elseif strcmp(DynamicsModel,'CWode')
+                Dim_Crtl(jj).u(:,i) = Tc*Crtl(jj).u(:,i);
+            elseif strcmp(DynamicsModel,'NLode')
+                Dim_Crtl(jj).u(:,i) = (1/Tc)*Rrho*Crtl(jj).u(:,i);
             end
         end
     end
 end
 % -------------------------------------------------------------------------
+%%
+% for jj = 1:Num_Agent
+%     cMat0 = [c7;c4];
+%     idx = 1+mm*(jj-1):mm*jj;
+%     % plot3(p(idx(1),:),p(idx(2),:),p(idx(3),:),...
+%     %     '-.','Color',cMat0(jj,:),'LineWidth',2.5);
+%     plot3(sol(end,:,idx(1)),sol(end,:,idx(2)),sol(end,:,idx(3)),...
+%         '-.','Color',cMat0(jj,:),'LineWidth',2.5);
+% end
+
 
 %% ------------------ Integrate the system's trajectory -------------------
 for ll = 1
@@ -519,8 +533,15 @@ for ll = 1
                 conts2*eye(3)  conts3*eye(3)];
             X_ode45_LVLH(:,i+1) = blkdiag(A_inv,A_inv)*y_f;
             Pint(:,i+1)         = blkdiag(A_inv,A_inv)*Pint(:,i+1);
+        elseif strcmp(DynamicsModel,'CWode')
+            X_ode45_LVLH(:,i+1) = Tc*y_f;
+            Pint(:,i+1)         = Tc*Pint(:,i+1);
+        elseif strcmp(DynamicsModel,'NLode')
+            X_ode45_LVLH(:,i+1) = [Rrho*y_f(:,1:3); (1/Tc)*Rrho*y_f(:,4:6),...
+                                   Rrho*y_f(:,7:9); (1/Tc)*Rrho*y_f(:,10:12)];
+            Pint(:,i+1)         = [Rrho*Pint(1:3,i+1); (1/Tc)*Rrho*Pint(4:6,i+1),...
+                                   Rrho*Pint(7:9,i+1); (1/Tc)*Pint(10:12,i+1)];
         end
-        
     end
     disp('Done!!!!!');
 end
@@ -536,39 +557,38 @@ for ll = 1
     for i = 1:Num_Agent
         
         if strcmp(DynamicsModel,'THode')
-            subplot(2,2,i+2)
+            Time = (Tc/(2*pi))*xnew/3600;
         else
-            subplot(2,1,i)
+            Time = Tc*xnew/3600;
         end
+        set(gca,'XTick',0:pi/2:2*pi)
+        set(gca,'XTickLabel',{'0','$\pi$/2','$\pi$','3$\pi$/2','2$\pi$'})
+        subplot(2,2,i)
+        plot(Time,Dim_Crtl(i).u(1,:),'r','LineWidth',2.5);
+        hold on
+        plot(Time,Dim_Crtl(i).u(2,:),'b','LineWidth',2.5);
+        plot(Time,Dim_Crtl(i).u(3,:),'g','LineWidth',2.5);
+        ylabel({'Required Control', '(LVLH)'})
+        xlabel('time (hr)')
+        xlim([Time(1) Time(end)])
+        grid on;
+        title(Label(i))
+        
+        
+        subplot(2,2,i+2)
         plt1 = plot(xnew,Crtl(i).u(1,:),'r','LineWidth',2.5);
         hold on
         plt2 = plot(xnew,Crtl(i).u(2,:),'b','LineWidth',2.5);
         plt3 = plot(xnew,Crtl(i).u(3,:),'g','LineWidth',2.5);
+        ylabel({'Nondimensionalized', 'control'})
         if strcmp(DynamicsModel,'THode')
-            ylabel({'Nondimensionalized control', '(Tschauner-Hempel)'})
+            xlabel('f [rad]')
         else
-            ylabel({'Required Control', '(LVLH)'})
+            xlabel('$\tau [-]$')
         end
-        xlabel('f (rad)')
+        xlim([xnew(1) xnew(end)])
         grid on;
         title(Label(i))
-        
-        if strcmp(DynamicsModel,'THode')
-            Time = (Tc/(2*pi))*xnew/3600;
-            set(gca,'XTick',0:pi/2:2*pi)
-            set(gca,'XTickLabel',{'0','$\pi$/2','$\pi$','3$\pi$/2','2$\pi$'})
-            subplot(2,2,i)
-            plot(Time,Dim_Crtl(i).u(1,:),'r','LineWidth',2.5);
-            hold on
-            plot(Time,Dim_Crtl(i).u(2,:),'b','LineWidth',2.5);
-            plot(Time,Dim_Crtl(i).u(3,:),'g','LineWidth',2.5);
-            ylabel({'Required Control', '(LVLH)'})
-            xlim([Time(1) Time(end)])
-            xlabel('time (hr)')
-            grid on;
-            title(Label(i))
-        end
-        
     end
     hL = legend([plt1, plt2, plt3],...
         {'u1','u2','u3'},'AutoUpdate','off');
@@ -623,7 +643,7 @@ end
 
 %% ---- 3D plot of the converged solution (Nondimensionalized units) ------
 for ll = 1
-    cMat1  = [c5;c6];
+    cMat1 = [c5;c6];
     cMat2 = [c3;c1];
     cMat0 = [c7;c4];
     
@@ -702,84 +722,83 @@ end
 
 %% --- 3D plot of the converged solution (in the configuration space) -----
 for ll = 1
-    if strcmp(DynamicsModel,'THode')
-        cMat1 = [c5;c6];
-        cMat2 = [c3;c1];
-        cMat0 = [c7;c4];
-        fh2 = figure;
-        hold on
-        plt0  = zeros(Num_Agent);
-        plt1   = zeros(Num_Agent);
-        plt2  = zeros(Num_Agent);
+    
+    cMat1 = [c5;c6];
+    cMat2 = [c3;c1];
+    cMat0 = [c7;c4];
+    fh2 = figure;
+    hold on
+    plt0  = zeros(Num_Agent);
+    plt1   = zeros(Num_Agent);
+    plt2  = zeros(Num_Agent);
+    
+    for jj = 1:Num_Agent
+        idx = 1+mm*(jj-1):mm*jj;
+        plt0(:,jj) = plot3(X_ode45_LVLH(idx(1),:),X_ode45_LVLH(idx(2),:),X_ode45_LVLH(idx(3),:),...
+            '-.','Color',cMat0(jj,:),'LineWidth',2.5);
         
-        for jj = 1:Num_Agent
-            idx = 1+mm*(jj-1):mm*jj;
-            txt = ['Agent_',num2str(jj)];
-            plt0(:,jj) = plot3(X_ode45_LVLH(idx(1),:),X_ode45_LVLH(idx(2),:),X_ode45_LVLH(idx(3),:),...
-                         '-.','Color',cMat0(jj,:),'LineWidth',2.5);
-                     
-            plt1(:,jj) = plot3(X_THpos01(1,idx(1)),X_THpos01(1,idx(2)),X_THpos01(1,idx(3)),'*',...
-                'LineWidth',3,...
-                'MarkerEdgeColor',cMat1(jj,:),...
-                'MarkerFaceColor',cMat1(jj,:)',...
-                'MarkerSize',8);
-            
-            plt2(:,jj) = plot3(X_THpos11(1,idx(1)),X_THpos11(1,idx(2)),X_THpos11(1,idx(3)),'o',...
-                'LineWidth',3,...
-                'MarkerEdgeColor',cMat2(jj,:),...
-                'MarkerFaceColor',cMat2(jj,:),...
-                'MarkerSize',8);
-            
-            h5 = plot3(0,0,0,'bo',...
-                'LineWidth',2,...
-                'MarkerEdgeColor','k',...
-                'MarkerFaceColor','k',...
-                'MarkerSize',15);
-            
-            plot3(X_THpos11(:,idx(1)),X_THpos11(:,idx(2)),X_THpos11(:,idx(3)),'Color',cMat2(jj,:));
-            plot3(X_THpos01(:,idx(1)),X_THpos01(:,idx(2)),X_THpos01(:,idx(3)),'Color',cMat1(jj,:));
-            
-            grid on
-            xlabel('X [km]')
-            ylabel('Y [km]')
-            zlabel('Z [km]')
-            title('{\color{black} 3D Relative Trajectory}','interpreter','tex')
-        end
-
-
-        view(68,10)
-        hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
+        plt1(:,jj) = plot3(X_THpos01(1,idx(1)),X_THpos01(1,idx(2)),X_THpos01(1,idx(3)),'*',...
+            'LineWidth',3,...
+            'MarkerEdgeColor',cMat1(jj,:),...
+            'MarkerFaceColor',cMat1(jj,:)',...
+            'MarkerSize',8);
+        
+        plt2(:,jj) = plot3(X_THpos11(1,idx(1)),X_THpos11(1,idx(2)),X_THpos11(1,idx(3)),'o',...
+            'LineWidth',3,...
+            'MarkerEdgeColor',cMat2(jj,:),...
+            'MarkerFaceColor',cMat2(jj,:),...
+            'MarkerSize',8);
+        
+        h5 = plot3(0,0,0,'bo',...
+            'LineWidth',2,...
+            'MarkerEdgeColor','k',...
+            'MarkerFaceColor','k',...
+            'MarkerSize',15);
+        
+        plot3(X_THpos11(:,idx(1)),X_THpos11(:,idx(2)),X_THpos11(:,idx(3)),'Color',cMat2(jj,:));
+        plot3(X_THpos01(:,idx(1)),X_THpos01(:,idx(2)),X_THpos01(:,idx(3)),'Color',cMat1(jj,:));
+        
+        grid on
+        xlabel('X [km]')
+        ylabel('Y [km]')
+        zlabel('Z [km]')
+        title('{\color{black} 3D Relative Trajectory}','interpreter','tex')
+    end
+    
+    
+    view(68,10)
+    hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
         {'Chief Location','Agent1 Init Condition','Agent2 Init Condition',...
         'Agent1 End Condition','Agent2 End Condition','Agent1 Transfer Traj',...
         'Agent2 Transfer Traj'},'AutoUpdate','off');
-        % Programatically move the Legend
-        newPosition = [0.22 0.72 0.1 0.1]; %[0.21 0.72 0.1 0.1];
-        newUnits = 'normalized';
-        set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
-        
-        % r = 1;
-        % [x_sphere, y_sphere, z_sphere] = sphere(100);
-        % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
-        % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
-        % axis equal
-        
-        
-        % set all units inside figure to normalized so that everything is scaling accordingly
-        set(findall(fh2,'Units','pixels'),'Units','normalized');
-        % do show figure on screen
-        set(fh2, 'visible', 'on')
-        % set figure units to pixels & adjust figure size
-        fh2.Units = 'pixels';
-        fh2.OuterPosition = [10 10 900 800];
-        % define resolution figure to be saved in dpi
-        res = 500;
-        % recalculate figure size to be saved
-        set(fh2,'PaperPositionMode','manual')
-        fh2.PaperUnits = 'inches';
-        fh2.PaperPosition = [0 0 5580 4320]/res;
-        % save figure
-        % print(fh2,'ConvergeSolution','-dpng',sprintf('-r%d',res))
-    end
+    % Programatically move the Legend
+    newPosition = [0.22 0.72 0.1 0.1]; %[0.21 0.72 0.1 0.1];
+    newUnits = 'normalized';
+    set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
+    
+    % r = 1;
+    % [x_sphere, y_sphere, z_sphere] = sphere(100);
+    % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
+    % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
+    % axis equal
+    
+    
+    % set all units inside figure to normalized so that everything is scaling accordingly
+    set(findall(fh2,'Units','pixels'),'Units','normalized');
+    % do show figure on screen
+    set(fh2, 'visible', 'on')
+    % set figure units to pixels & adjust figure size
+    fh2.Units = 'pixels';
+    fh2.OuterPosition = [10 10 900 800];
+    % define resolution figure to be saved in dpi
+    res = 500;
+    % recalculate figure size to be saved
+    set(fh2,'PaperPositionMode','manual')
+    fh2.PaperUnits = 'inches';
+    fh2.PaperPosition = [0 0 5580 4320]/res;
+    % save figure
+    % print(fh2,'ConvergeSolution','-dpng',sprintf('-r%d',res))
+    
 end
 % -------------------------------------------------------------------------
 
@@ -1060,11 +1079,11 @@ A  = [zeros(3) eye(3);
       3*mu_dot^2 0 0 0 2*mu_dot 0;
       0 0 0 -2*mu_dot 0 0;
       0 0 -mu_dot^2 0 0 0]*Tc; % Partial derivative pFd the drift vector field
-k = 1+e_chief*cos(t);
-A = [zeros(3) eye(3);
-    3/k  0  0   0   2  0;
-    0    0  0   -2  0  0;
-    0    0  -1  0   0  0];
+% k = 1+e_chief*cos(t);
+% A = [zeros(3) eye(3);
+%     3/k  0  0   0   2  0;
+%     0    0  0   -2  0  0;
+%     0    0  -1  0   0  0];
 N = 6; M = 3;
 Xaug = []; dXaug = [];
   % make the state and state deirvative simbolic
