@@ -25,7 +25,8 @@ Pcrp = 1357/(299792458); % Solar pressure
 
 JulianDay = JD+time/86400;
 [XS, ~, ~] = Ephem(JulianDay,3,'EME2000');
-s = (XS-X(1:3,:))/norm((XS-X(1:3,:))); s = ECI_to_BodyFrame*s;
+DelR = XS-X(1:3,:); NomrDelR = (DelR.'*DelR).^(1/2);
+s = DelR/NomrDelR; s = ECI_to_BodyFrame*s;
 
 % Collecting sailcraft characteristics
 rhos = Spacecraft.rhos;rhod = Spacecraft.rhod;
@@ -33,20 +34,22 @@ area = Spacecraft.L*Spacecraft.l;
 Cr   = Spacecraft.Cr;
 mass = Spacecraft.M+Spacecraft.m;
 rs_squared = norm((XS-X(1:3,:))/AU)^2;
+check = NomrDelR/AU;
 P = -Cr*Pcrp*area/(mass*rs_squared);
-n = [0 0 1]'; Costheta = dot(n,s);
+n = [0 0 1]'; Costheta = n.'*s;
 
 % Computing the external force exerted on the sailcraft (in km/s^2)
 if Costheta<0
     a_srp = zeros(3,1);
 else
-    a_srp = -P*dot(n,s)*((1-rhos)*s+(rhod+2*rhos*dot(n,s))*n)/1000;
+    a_srp = -P*Costheta*((1-rhos)*s+(rhod+2*rhos*Costheta)*n)/1000;
 end
 F = mass*a_srp;
 % Computing the torque acting on the sailcraft
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 rb     = Spacecraft.rhos*[0 0 1]';   % lever arm wrt the spacecraft center of mass 
-thau_B = cross(rb,F);                % the solar radiation torque
+rb_tilde  = [0 -rb(3) rb(2); rb(3) 0 -rb(1); -rb(2) rb(1) 0];
+thau_B = rb_tilde*F;                % the solar radiation torque
 
 F_body = [a_srp; thau_B];
 end

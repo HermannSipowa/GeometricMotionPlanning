@@ -1,4 +1,4 @@
-function [Position,Velocity] = COEstoRV(COE,mu)
+function [Position,Velocity,f] = COEstoRV(COE,mu)
 %--------------------------------------------------------------------------
 % [Position,Velocity] = COEstoRV(OE,mu)
 %

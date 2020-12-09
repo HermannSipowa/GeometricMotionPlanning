@@ -1,6 +1,5 @@
 function Xaug_dot = UnperturbedRelativeMotionODE(t, Xaug,mu_Earth)
 format long
-% global mu_Earth
 
 %% Collecting relevant quantities
 Target_States = Xaug(1:6,:); 
@@ -18,7 +17,7 @@ Omega = TN*( h_vec/rt_norm^2);
 Omegadot = TN*( -2*dot(r_target,v_target)*h_vec/rt_norm^4 );
 
 %% Computing the relative acceleration
-delf     =  -mu_Earth/rc_norm^3*r_c + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
+delf =  -mu_Earth/rc_norm^3*r_c + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
 
 %% Integrating the the target trajectory
 Xdot(1:3,:) = v_target;
@@ -27,7 +26,8 @@ Xdot(4:6,:) = -mu_Earth/rt_norm^3*r_target;
 %% Integrating the relative trajectory
 Rho_dot(1:3,:) = rho_prime;
 Rho_dot(4:6,:) =  delf - 2*cross(Omega,rho_prime) ...
-                - cross(Omegadot,rho) - cross(Omega,cross(Omega,rho));
+                  - cross(Omega,cross(Omega,rho)) ...
+                  - cross(Omegadot,rho);
 
 %% Collecting the rates of change
 Xaug_dot = [Xdot; Rho_dot];

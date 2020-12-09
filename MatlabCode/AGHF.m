@@ -1,4 +1,4 @@
-function [p, dp, xfull, xdrift, bufull, budrift, sol, t, x, xnew, cost, X_ode45,p_initial] = AGHF(tmax, xpoints, intgrids, tpoints, k, X, Xf, T, N, M)
+function [p, dpdx, Crtl, sol, t, x, xnew, cost, p_initial] = AGHF(tmax, xpoints, xpoints_new, tpoints, k, X, Xf, T, N, M, AgentNum)
 % unicycle_drift_AGHF Solve the AGHF for dynamical unicycle
 % code auther: Yinai Fan
 %
@@ -35,14 +35,14 @@ x = linspace(0,T,xpoints);                  % discretization of the curve in tim
 t = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of s interval in log scale
 
 % global variable for the Euler Lagrange function and Metric G
-global get_EL get_G
+global get_EL get_G Period
 
 % generate functions for EL, metric G, drift term f, control matrix F
 % please modify this function if system is changed
-[get_EL, get_G, get_f, get_F] = generate_fh_of_model(N,M); 
+[get_EL, get_G, get_f, get_F] = generate_fh_of_model(N,M,AgentNum); 
 
-opts = odeset('RelTol',2.22045e-9,'AbsTol',2.22045e-20);
-% opts = odeset('AbsTol',1e-14);
+% opts = odeset('RelTol',2.22045e-9,'AbsTol',2.22045e-20);
+opts = odeset('AbsTol',1e-14);
 tic;
 disp('solving PDE...');
 % Solve AGHF
@@ -53,73 +53,52 @@ sol = pdepe(m,@(x,t,u,DuDx) mypdexpde(x,t,u,DuDx,k,N),...
 % The solution "sol" is of form sol(t,x,i)
 toc;
 
-%------------------ Extract Controls and state trajectory------------------
+%------------------------ Control Extraction ------------------------------
 tic;
 disp('Extracting Trajectory...');
 
-% # of integration grids
-xpoints_new = intgrids;
 % initialize controls and states
-budrift = zeros(M,xpoints_new); % actual control
-bufull = zeros(N,xpoints_new); % full control (control on unadmissible directions included!!!)
+Crtl = struct('u', cell(1, AgentNum)); % actual control
 xnew = linspace(0,T,xpoints_new); % time grids for integration
 
 % use spline to interpolate state from steady state pde solution, p
-p = zeros(N,xpoints_new);
+p         = zeros(N,xpoints_new);
 p_initial = zeros(N,xpoints_new);
+dpdx      = zeros(N,xpoints_new);
+dx_new    = diff([xnew(3),xnew,xnew(xpoints_new-2)]);
 for i = 1:N
-    p(i,:) = spline(x,sol(end,:,i),xnew);
+    p(i,:)         = spline(x,sol(end,:,i),xnew);
     p_initial(i,:) = spline(x,sol(1,:,i),xnew);
+    
+    % Numerically computing the time derivative of the state
+    dp_new    = diff([p(i,3),p(i,:),p(i,xpoints_new-2)]);
+    dpdx(i,:) = (dp_new(1:end-1)./dx_new(1:end-1).*dx_new(2:end) ...
+        + dp_new(2:end)./dx_new(2:end).*dx_new(1:end-1)) ...
+        ./ (dx_new(2:end)+dx_new(1:end-1));
 end
-% initial value of drift term f(x(0))
-drift0 = get_f(p(:,1));
-% manualy defferentiate to get solution of x_dot, represented by dp
-dp = [drift0 diff(p.').'/(T/(xpoints_new-1))];
 
 % control extraction
+mm = 6;
 for i = 1 : xpoints_new
     % f(x(t)), note: the F_d(x) in paper
-    drift = get_f(p(:,1));
+    drift = get_f(p(:,i));
     % get [Fc F], note: the F_bar matrix in paper
-    Ffull = get_F(p(:,1));
-    % get full control
-    bufull(:,i)  = Ffull^(-1) * ( dp(:,i) - drift );
-    % get actual control
-    budrift(:,i) = bufull(N-M+1:end,i);
-end
-
-
-%Integrate to get state trajectory
-
-% initialize state trajctroy with full control
-xfull = zeros(N,xpoints_new);
-%Initial state
-xfull(:,1) = p(:,1); 
-% initialize state trajctroy with actual control
-xdrift = zeros(N,xpoints_new);
-X_ode45 = zeros(N,xpoints_new);
-%Initial state
-xdrift(:,1)= p(:,1);
-X_ode45(:,1) = p(:,1);
-tolerance = 1e-16;
-h = 1e-6;
-% Euler integration to get trajectory (can be replaced by ode45 to get better result)
-for i = 1:xpoints_new-1
-    %[Fc F]
-    cBfull = get_F(xfull(:,i));
-    % just F
-    cBdrift = cBfull(:,(end-M+1):end);
-    drift = get_f(xdrift(:,i));
-    drift_full = get_f(xfull(:,i));
-    xdrift(:,i+1) = xdrift(:,i) + ( drift + cBdrift*budrift(:,i) )*(xnew(i+1)-xnew(i));
-    xfull(:,i+1) = xfull(:,i) + ( drift_full + cBfull*bufull(:,i) )*(xnew(i+1)-xnew(i));
+    Ffull = get_F(p(:,i));
+    B = Ffull(:,M+1:end);
     
-    u = budrift(:,i);
-    [y_f, ~, h_next] = Runge_Kutta_Fehlberg_4_5(@(t,X)MyOde(t,X,u),X_ode45(:,i),xnew(i),h,xnew(i+1),tolerance);
-    h = h_next;
-    X_ode45(:,i+1) = y_f;
+    % Extracting/approximate the required control
+    for jj = 1:AgentNum
+        idx = 1+mm*(jj-1):mm*jj;
+        Crtl(jj).u(:,i) = (B.'*B)\(B.')* ( dpdx(idx,i) - drift(idx) );
+    end
 end
 
+% Redimensionalizing the problem
+p_initial = Period.*p_initial;
+p         = Period.*p;
+
+
+%------------------ Calculating the action integral -----------------------
 % initialize cost -- actuated curve length
 cost = zeros(1,tpoints);
 % calculate the atuated curve length for each grid of s
@@ -143,9 +122,11 @@ toc;
 disp('Done!!!!!');
 
 end
+% -------------------------------------------------------------------------
+% #########################################################################
+% -------------------------------------------------------------------------
 
 % The followings are the PDE, initial condition and boundary condition for pdepe:
-
 
 function [c,f,s] = mypdexpde(x,t,u,DuDx,k,N)    % Define PDE; right-hand-side of AGHF
 
@@ -166,7 +147,7 @@ c = ones(N,1);
 % for details of f, s, c, please see the documentation for pdepe
 
 end
-% --------------------------------------------------------------------------
+% -------------------------------------------------------------------------
  
 function u0 = mypdexic(x, X0, Xf, T)    % Initial condition for AGHF
 
@@ -184,7 +165,7 @@ u0 = X0*cos(freq1*x/T) ...
     - (X0+Xf)*sin(freq2*x/T);
 
 end
-% --------------------------------------------------------------------------
+% -------------------------------------------------------------------------
 
 function [pl,ql,pr,qr] = mypdexbc(xl,ul,xr,ur,t, X0, Xf, N)    % Boundary condition for AGHF
 
@@ -194,6 +175,7 @@ pr = ur-Xf;
 qr = zeros(N,1);
 
 end
+% -------------------------------------------------------------------------
 
 % generate functions for calculating EL equation:
 %!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -208,29 +190,61 @@ end
 % get_f -- function handle for calculating the drift term f(x)
 % get_F -- function handle for calculating the full control matrix [Fc(x) F(x)]
 
-function [get_EL, get_G, get_f, get_F] = generate_fh_of_model(N,M) 
+function [get_EL, get_G, get_f, get_F] = generate_fh_of_model(N,M,AgentNum) 
 tic;
 disp('generating functions for pdepe...');
 
-% ------------------------- system setup ---------------------------------
-global mu_dot
-
-% make the state and state deirvative simbolic
-syms x y z xdot ydot zdot  dx dy dz dxdot dydot dzdot Penalty real
-X  = [x y z xdot ydot zdot]';
-Xd = [dx dy dz dxdot dydot dzdot]';
+% ------------------------- system setup ----------------------------------
+syms Penalty
+global mu_dot Period
 A  = [zeros(3) eye(3);
       3*mu_dot^2 0 0 0 2*mu_dot 0;
       0 0 0 -2*mu_dot 0 0;
-      0 0 -mu_dot^2 0 0 0]; % Partial derivative pFd the drift vector field
+      0 0 -mu_dot^2 0 0 0]*Period; % Partial derivative pFd the drift vector field
+N = 6;
+  % make the state and state deirvative simbolic
+  for i = 1:AgentNum
+      X_Variables{i} = [{strcat('x',num2str(i))},{strcat('y',num2str(i))},...
+          {strcat('z',num2str(i))},{strcat('xdot',num2str(i))},...
+          {strcat('ydot',num2str(i))},{strcat('zdot',num2str(i))}];
+      dX_Variables{i} = [{strcat('dx',num2str(i))},{strcat('dy',num2str(i))},...
+          {strcat('dz',num2str(i))},{strcat('dxdot',num2str(i))},...
+          {strcat('dydot',num2str(i))},{strcat('dzdot',num2str(i))}];
+      if i == 1
+          AMat_Aug = A;
+          % [Fc F], note: the F_bar matrix in paper
+          F = sym(eye(N)); F_Aug = F;
+          % penalty matrix (D matrix in the paper)
+          D = diag([Penalty*ones(1,N-M) ones(1,M)]); D_Aug = D;
+      else
+          AMat_Aug = blkdiag(AMat_Aug,A);
+          F_Aug = blkdiag(F_Aug,F);
+          D_Aug = blkdiag(D_Aug,D);
+      end
+  end
+% syms x y z xdot ydot zdot  dx dy dz dxdot dydot dzdot Penalty real
+X1  = cell2sym( X_Variables{1} );
+X2  = cell2sym( X_Variables{2} );
+X3  = cell2sym( X_Variables{3} );
+X4  = cell2sym( X_Variables{4} );
+% X5  = cell2sym( X_Variables{5} );
+% X6  = cell2sym( X_Variables{6} );
+
+dX1 = cell2sym( dX_Variables{1} );
+dX2 = cell2sym( dX_Variables{1} );
+dX3 = cell2sym( dX_Variables{1} );
+dX4 = cell2sym( dX_Variables{1} );
+% dX5 = cell2sym( dX_Variables{1} );
+% dX6 = cell2sym( dX_Variables{1} );
+
+Xaug  = [X1(:);X2(:);X3(:);X4(:)]; % ;X5(:);X6(:)];
+dXaug = [dX1(:);dX2(:);dX3(:);dX4(:)]; % ;dX5(:);dX6(:)];
+
+
 % drift term f(x) note: Fd(x) is used in the paper
-f = A*X;
-% [Fc F], note: the F_bar matrix in paper
-F = sym(eye(N));
-% penalty matrix (D matrix in the paper)
-D = diag([Penalty*ones(1,N-M) ones(1,M)]);
+f = AMat_Aug*Xaug;
 % the metric, before adding the state constraint barrier functions
-H = (F.')^(-1)*D*F^(-1);
+H = (F_Aug.')^(-1)*D_Aug*F_Aug^(-1);
 
 
 % -------------------- state constraint barrier function ------------------
@@ -254,25 +268,25 @@ B = [B b]; % attach the barrier function to B
 % the metric with state constraint barier functions
 G = (sum(B)+1)*H;
 % actuated curve length
-L = simplify( (Xd - f).' * G * (Xd - f) );
+L = simplify( (dXaug - f).' * G * (dXaug - f) );
 
 % -------------------- Function Generations -------------------------------
 
 % taking derivatives symbolically to get the EL euqation terms
 % pLx -- dL/dx
 % pLxd -- dL/d(x_dot)
-pLx  = sym('pLx', [N 1],'real');
-pLxd = sym('pLxd', [N 1],'real');
-for i=1:N
-    pLx(i)  = diff(L,X(i));
-    pLxd(i) = diff(L,Xd(i));
+pLx  = sym('pLx', [N*AgentNum 1],'real');
+pLxd = sym('pLxd', [N*AgentNum 1],'real');
+for i=1:N*AgentNum
+    pLx(i)  = diff(L,Xaug(i));
+    pLxd(i) = diff(L,dXaug(i));
 end
 
 % generate functions
-get_EL = matlabFunction([pLx, pLxd],'vars', {X,Xd,Penalty});
-get_G  = matlabFunction(G,'vars', {X,Penalty});
-get_f  = matlabFunction(f,'vars',{X});
-get_F  = matlabFunction(F,'vars',{X});
+get_EL = matlabFunction([pLx, pLxd],'vars', {Xaug,dXaug,Penalty});
+get_G  = matlabFunction(G,'vars', {Xaug,Penalty});
+get_f  = matlabFunction(f,'vars',{Xaug});
+get_F  = matlabFunction(F,'vars',{Xaug});
 
 toc;
 end
@@ -280,7 +294,7 @@ end
 
 function [xdot] = MyOde(t,x,u)
 format long 
-global mu_dot
+global mu_dot Period
 % Reshaping the input into an 6 by n matrix
 [l,~] = size(x);
 x = reshape(x,6,l/6);
@@ -290,91 +304,16 @@ B = [zeros(3); eye(3)];
 A = [zeros(3) eye(3);
     3*mu_dot^2 0 0 0 2*mu_dot 0;
     0 0 0 -2*mu_dot 0 0;
-    0 0 -mu_dot^2 0 0 0];
+    0 0 -mu_dot^2 0 0 0]*Period;
 
 % Computing the derivatives for the ode
 xdot = A*x + B*u;
 xdot = xdot(:);
 
 end
+% -------------------------------------------------------------------------
 
 
-
-% function [get_EL, get_G, get_f, get_F] = generate_fh_of_model(N,M) 
-% tic;
-% disp('generating functions for pdepe...');
-% 
-% % ------------------------- system setup ---------------------------------
-% 
-% % make the state and state deirvative simbolic
-% syms x y th z1 z2 k dx dy dth dz1 dz2 real
-% X = [x y th z1 z2]';
-% Xd = [dx dy dth dz1 dz2]';
-% 
-% % drift term f(x) note: Fd(x) is used in the paper
-% f = [cos(th)*z1 sin(th)*z1 z2 0 0]';
-% % [Fc F], note: the F_bar matrix in paper
-% F= sym(eye(N));
-% % penalty matrix (D matrix in the paper)
-% D = diag([k*ones(1,N-M) ones(1,M)]);
-% % the metric, before adding the state constraint barrier functions
-% H = (F.')^(-1)*D*F^(-1);
-% 
-% 
-% % -------------------- state constraint barrier function ------------------
-% % B is a vector of barrier function for 1 state constraint, each scaler state
-% % constraint need 1 barrier function
-% B = [];
-% % barrier function parameters
-% kb = .01; % barrier function gain
-% pb = 1; % order of barrier function
-% 
-% % b is one penalty term for state constraint
-% %b=0; % no state contraints
-% b = kb/((2*pi/4)^2 - z2^2)^pb; %contraint on angular velocity, |z2|<pi/2
-% B = [B b]; % attach the barrier function to B
-% %b = kb/(2^2 - z1^2)^pb; %contraint on translational velocity, |z1|<2
-% %b = kb/(z1+2)^pb + kb/(2-z1)^pb; %contraint on translational velocity |z1|<2
-% 
-% 
-% % -------------------- Metric and curve Length ----------------------------
-% 
-% % the metric with state constraint barier functions
-% G =(sum(B)+1)*H;
-% % actuated curve length
-% L =  simplify( (Xd - f).' * G * (Xd - f) );
-% 
-% % -------------------- Function Generations -------------------------------
-% 
-% % taking derivatives symbolically to get the EL euqation terms
-% % pLx -- dL/dx
-% % pLxd -- dL/d(x_dot)
-% pLx = sym('pLx', [N 1],'real');
-% pLxd = sym('pLxd', [N 1],'real');
-% for i=1:N
-%     pLx(i) =  diff(L,X(i));
-%     pLxd(i) = diff(L,Xd(i));
-% end
-% 
-% % generate functions
-% get_EL = matlabFunction([pLx, pLxd],'vars', {X,Xd,k});
-% get_G = matlabFunction(G,'vars', {X,k});
-% get_f = matlabFunction(f,'vars',{X});
-% get_F = matlabFunction(F,'vars',{X});
-% 
-% toc;
-% end
-
-% 
-% function [Xdot] = MyOde(t,X,u)
-% th = X(3);
-% z1 = X(4);
-% z2 = X(5);
-% f = [cos(th)*z1 sin(th)*z1 z2 0 0]';
-% B = [0 0; 0 0; 0 0; 1 0; 0 1];
-% Xdot = f + B*u;
-% 
-% end
 
 
 

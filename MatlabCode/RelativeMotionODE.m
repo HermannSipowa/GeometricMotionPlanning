@@ -11,7 +11,7 @@ rho_aug  = Xaug(8:13,:);
 r_target = X_chief(idx,1:3)'; v_target = X_chief(idx,4:6)';
 rt_norm = norm(r_target);
 rho = rho_aug(1:3,:); rho_prime = rho_aug(4:6,:);
-r_c = [rt_norm+rho(1) rho(2) rho(3)]'; rc_norm = norm(r_c); % RIC position of the chasser
+r_c = [rt_norm+rho(1) rho(2) rho(3)]'; rc_norm = (r_c.'*r_c).^(1/2);  % RIC position of the chasser
 TN = DCM(r_target,v_target); % DCM's between target's RIC frame and ECI frame
 r_chasser = TN\r_c; % ECI position of the chasser
 

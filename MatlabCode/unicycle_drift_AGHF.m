@@ -223,8 +223,8 @@ H = (F.')^(-1)*D*F^(-1);
 % constraint need 1 barrier function
 B = [];
 % barrier function parameters
-kb = .01; % barrier function gain
-pb = 1; % order of barrier function
+% kb = .01; % barrier function gain
+% pb = 1; % order of barrier function
 
 % b is one penalty term for state constraint
 % b = 0; % no state contraints
