@@ -8,19 +8,34 @@ close all
 start_up
 format long e
 clc
-global mu_Earth tspan M T_normalized Xnom mu_dot ...
+global mu_Earth tspan M T_normalized mu_dot ...
     Rrho Tc Num_Agent a_chief e_chief DynamicsModel ...
-    get_EL get_G Period get_f % iteration InitalCondition
+    Period % iteration InitalCondition
 
-c1 = rgb('DarkGreen');
-c2 = rgb('Gold');
-c3 = rgb('Lime');
-c4 = rgb('DarkOrange');
-c5 = rgb('DarkBlue');
-c6 = rgb('Red');
-c7 = rgb('Purple');
-c8 = rgb('Bisque');
+c1  = rgb('DarkGreen');
+c2  = rgb('Gold');
+c3  = rgb('Lime');
+c4  = rgb('DarkOrange');
+c5  = rgb('DarkBlue');
+c6  = rgb('Red');
+c7  = rgb('Purple');
+c8  = rgb('Bisque');
+c9  = rgb('Orange');
+c10 = rgb('DarkGray');
+c11 = rgb('Teal');
 mm = 6;
+addpath('/Users/hermann/Desktop/casadi-osx-matlabR2015a-v3.5.5')
+import casadi.*
+CasADiopts = struct('main', true, 'mex', true);
+
+%%
+%------------------- Specify the dynamics Model ------------------------  
+% Chose from: 
+% - CWode = Clohessy–Wiltshire, 
+% - THode = Tschauner-Hempel , 
+% - NLode = Full Nonlinear Model 
+DynamicsModel = 'NLode';
+SimTime    = 0.75;
 
 %% Calculating the boundaries conditions
 %=======================================%
@@ -28,17 +43,18 @@ mu_Earth   = 3.986004415E5; % Earth gravitational parameter
 Num_Agent  = 2; % Number of agents in the system
 Num_Agent1 = 1; % Number of agents in the first final-orbit
 Num_Agent2 = 1; % Number of agents in the second final-orbit
-SimTime    = 0.5;
+
 % Specifying the chief's orbit
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a_chief      = 1.42e4;   % Semi-major axis in Km
-e_chief      = 0.0;      % Eccentricity
+e_chief      = 0.5;      % Eccentricity
 inc_chief    = 50;       % Inclination in deg0
 BigOmg_chief = 10;       % RAAN in deg
 LitOmg_chief = 10;       % AOP in deg
-M_chief      = 0;        % Mean anomaly
+M_chief1     = 0;        % Initial mean anomaly
+M_chief2     = (2*pi)*SimTime;  % Final mean anomaly
 OE_Chief     = [a_chief,e_chief,inc_chief,...
-                BigOmg_chief,LitOmg_chief,M_chief];
+                BigOmg_chief,LitOmg_chief,M_chief1];
 
 
 %% Integrating the chief's trajectory
@@ -47,102 +63,186 @@ Period  = (2*pi)*sqrt(a_chief^3/mu_Earth);
 PNum    = 1;
 IntTime = PNum*Period;
 tspan   = linspace(0,IntTime,1e4);
-options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-30);
+options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-17);
 mu_dot  = sqrt(mu_Earth/a_chief^3); % Chief's mean motion
 Rc  = a_chief*eye(3); Rrho = eye(3); Tc = Period; T_normalized = tspan/Tc;
 inc_chief = deg2rad(inc_chief); BigOmg_chief = deg2rad(BigOmg_chief);
-LitOmg_chief = deg2rad(LitOmg_chief); M_chief = deg2rad(M_chief);
-COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief];
-[Position_target,Velocity_target] = COEstoRV(COE,mu_Earth);
-X0_Chief  = [Position_target; Velocity_target];
-[~, Xnom] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief,options);
+LitOmg_chief = deg2rad(LitOmg_chief); M_chief1 = deg2rad(M_chief1);
+COE1 = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief1];
+[Position_target1,Velocity_target1] = COEstoRV(COE1,mu_Earth);
+X0_Chief1  = [Position_target1; Velocity_target1];
+[~, Xnom1] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief1,options);
 
+COE2 = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief2];
+[Position_target2,Velocity_target2] = COEstoRV(COE2,mu_Earth);
+X0_Chief2  = [Position_target2; Velocity_target2];
+[~, Xnom2] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief2,options);
 
-%%
-M_chief1 = 0;
-COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief1];
-[~,~,f1] = COEstoRV(COE,mu_Earth);
-q1_chief = e_chief*cos(LitOmg_chief); q2_chief = e_chief*sin(LitOmg_chief);
-% f1 = 0;
-theta_chief1 = f1+LitOmg_chief;
-OE_chief1 = [a_chief, theta_chief1, inc_chief, q1_chief, q2_chief, BigOmg_chief];
-AMap1 = ForwardMapping(OE_chief1, mu_Earth); % Linear mapping matrix
+%% ------- Create MX files to interpolate the chief's states (Xnom) -------
+for i = 1
+    if exist('Chief_x','file') == 3
+        delete Chief_x.c Chief_x.mexmaci64
+    end
+    if exist('Chief_y','file') == 3
+        delete Chief_y.c Chief_y.mexmaci64
+    end
+    if exist('Chief_z','file') == 3
+        delete Chief_z.c Chief_z.mexmaci64
+    end
+    if exist('Chief_dx','file') == 3
+        delete Chief_dx.c Chief_dx.mexmaci64
+    end
+    if exist('Chief_dy','file') == 3
+        delete Chief_dy.c Chief_dy.mexmaci64
+    end
+    if exist('Chief_dz','file') == 3
+        delete Chief_dz.c Chief_dz.mexmaci64
+    end
+    
+    Chief_x  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,1)');
+    Chief_y  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,2)');
+    Chief_z  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,3)');
+    Chief_dx = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,4)');
+    Chief_dy = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,5)');
+    Chief_dz = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,6)');
+    
+    Chief_x.generate('Chief_x.c',CasADiopts);
+    Chief_y.generate('Chief_y.c',CasADiopts);
+    Chief_z.generate('Chief_z.c',CasADiopts);
+    Chief_dx.generate('Chief_dx.c',CasADiopts);
+    Chief_dy.generate('Chief_dy.c',CasADiopts);
+    Chief_dz.generate('Chief_dz.c',CasADiopts);
+    mex Chief_x.c -largeArrayDims
+    mex Chief_y.c -largeArrayDims
+    mex Chief_z.c -largeArrayDims
+    mex Chief_dx.c -largeArrayDims
+    mex Chief_dy.c -largeArrayDims
+    mex Chief_dz.c -largeArrayDims
+    clear Chief_x Chief_y Chief_z Chief_dx Chief_dy Chief_dz
+    
+    
+    if strcmp(DynamicsModel,'NLode')
+        if exist('Chief_x1','file') == 3
+            delete Chief_x1.c Chief_x1.mexmaci64
+        end
+        if exist('Chief_y1','file') == 3
+            delete Chief_y1.c Chief_y1.mexmaci64
+        end
+        if exist('Chief_z1','file') == 3
+            delete Chief_z1.c Chief_z1.mexmaci64
+        end
+        if exist('Chief_dx1','file') == 3
+            delete Chief_dx1.c Chief_dx1.mexmaci64
+        end
+        if exist('Chief_dy1','file') == 3
+            delete Chief_dy1.c Chief_dy1.mexmaci64
+        end
+        if exist('Chief_dz1','file') == 3
+            delete Chief_dz1.c Chief_dz1.mexmaci64
+        end
+        
+        Chief_x1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,1)');
+        Chief_y1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,2)');
+        Chief_z1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,3)');
+        Chief_dx1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,4)');
+        Chief_dy1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,5)');
+        Chief_dz1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,6)');
+        
+        Chief_x1.generate('Chief_x1.c',CasADiopts);
+        Chief_y1.generate('Chief_y1.c',CasADiopts);
+        Chief_z1.generate('Chief_z1.c',CasADiopts);
+        Chief_dx1.generate('Chief_dx1.c',CasADiopts);
+        Chief_dy1.generate('Chief_dy1.c',CasADiopts);
+        Chief_dz1.generate('Chief_dz1.c',CasADiopts);
+        mex Chief_x1.c -largeArrayDims
+        mex Chief_y1.c -largeArrayDims
+        mex Chief_z1.c -largeArrayDims
+        mex Chief_dx1.c -largeArrayDims
+        mex Chief_dy1.c -largeArrayDims
+        mex Chief_dz1.c -largeArrayDims
+        clear Chief_x1 Chief_y1 Chief_z1 Chief_dx1 Chief_dy1 Chief_dz1
+    end
+end 
+% -------------------------------------------------------------------------
 
-M_chief2 = (2*pi)*SimTime;
-COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief2];
-[~,~,f2] = COEstoRV(COE,mu_Earth);
-% f2 = (2*pi)*SimTime;
-theta_chief2 = f2+LitOmg_chief;
-OE_chief2 = [a_chief, theta_chief2, inc_chief, q1_chief, q2_chief, BigOmg_chief];
-AMap2 = ForwardMapping(OE_chief2, mu_Earth); % Linear mapping matrix
-
-% Specify the final relative-orbital elements of the deputies in both orbits
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
-dela = 0;
-dele1 = 1/(6*a_chief);
-deli1 = -1/(3*a_chief);
-delLitOmg = -2*pi*1E-5;
-delBigOmg = 0;
-delM = pi*1E-6;
-delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
-delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
-deltheta = delLitOmg + delM; % Relative true latitude in rad
-delCOE_1 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
-
-dela = 0;
-dele1 = -1/(8*a_chief);
-deli1 = -1/(20*a_chief);
-delLitOmg = -5*pi*1E-7;
-delBigOmg = pi*1E-6;
-delM = 0;
-delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
-delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
-deltheta = delLitOmg + delM; % Relative true latitude in rad
-delCOE_2 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
-
-
-dela = 0;
-dele1 = 1/(6*a_chief);
-deli1 = 1/(2*a_chief);
-delLitOmg = 0;
-delBigOmg = 0;
-delM = 0;
-delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
-delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
-deltheta = delLitOmg + delM; % Relative true latitude in rad
-delCOE_3 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
-
-dele2 = 1/(8*a_chief);
-deli2 = 2/(10*a_chief);
-delBigOmg = -pi*1E-5;
-delM = pi*1E-6;
-delLitOmg = pi*1E-5;
-deltheta = delLitOmg + delM; % Relative true latitude in rad
-
-delq1_2 = dele2*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
-delq2_2 = dele2*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
-delCOE_4 = [dela, deltheta, deli2, delq1_2, delq2_2, delBigOmg]';
-
-% Integrating the deputy initial and final trajectories
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
-X01 = AMap1*delCOE_1; Xi1 = X01;
-X02 = AMap1*delCOE_2; Xi2 = X02;
-Xf1 = AMap2*delCOE_3;
-Xf2 = AMap2*delCOE_4;
-
-%------------------- Specify the dynamics Model ------------------------  
-% Chose from: 
-% - CWode = Clohessy–Wiltshire, 
-% - THode = Tschauner-Hempel , 
-% - NLode = Full Nonlinear Model 
-DynamicsModel = 'CWode';
+%% --------------- Setting the deputy initial conditions ------------------
+for i = 1
+    M_chief1 = 0;
+    COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief1];
+    [~,~,f1] = COEstoRV(COE,mu_Earth);
+    q1_chief = e_chief*cos(LitOmg_chief); q2_chief = e_chief*sin(LitOmg_chief);
+    % f1 = 0;
+    theta_chief1 = f1+LitOmg_chief;
+    OE_chief1 = [a_chief, theta_chief1, inc_chief, q1_chief, q2_chief, BigOmg_chief];
+    AMap1 = ForwardMapping(OE_chief1, mu_Earth); % Linear mapping matrix
+    
+    M_chief2 = (2*pi)*SimTime;
+    COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief2];
+    [~,~,f2] = COEstoRV(COE,mu_Earth);
+    % f2 = (2*pi)*SimTime;
+    theta_chief2 = f2+LitOmg_chief;
+    OE_chief2 = [a_chief, theta_chief2, inc_chief, q1_chief, q2_chief, BigOmg_chief];
+    AMap2 = ForwardMapping(OE_chief2, mu_Earth); % Linear mapping matrix
+    
+    % Specify the final relative-orbital elements of the deputies in both orbits
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    dela = 0;
+    dele1 = 1/(6*a_chief);
+    deli1 = -1/(3*a_chief);
+    delLitOmg = -2*pi*1E-5;
+    delBigOmg = 0;
+    delM = pi*1E-6;
+    delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
+    delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
+    deltheta = delLitOmg + delM; % Relative true latitude in rad
+    delCOE_1 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
+    
+    
+    dele1 = -1/(8*a_chief);
+    deli1 = -1/(20*a_chief);
+    delLitOmg = -5*pi*1E-7;
+    delBigOmg = pi*1E-6;
+    delM = 0;
+    delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
+    delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
+    deltheta = delLitOmg + delM; % Relative true latitude in rad
+    delCOE_2 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
+    
+    
+    dele1 = 1/(6*a_chief);
+    deli1 = 1/(2*a_chief);
+    delLitOmg = 0;
+    delBigOmg = 0;
+    delM = 0;
+    delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
+    delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
+    deltheta = delLitOmg + delM; % Relative true latitude in rad
+    delCOE_3 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
+    
+    dele2 = 1/(8*a_chief);
+    deli2 = 2/(10*a_chief);
+    delBigOmg = -pi*1E-5;
+    delM = pi*1E-6;
+    delLitOmg = pi*1E-5;
+    deltheta = delLitOmg + delM; % Relative true latitude in rad
+    
+    delq1_2 = dele2*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
+    delq2_2 = dele2*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
+    delCOE_4 = [dela, deltheta, deli2, delq1_2, delq2_2, delBigOmg]';
+    
+    % Integrating the deputy initial and final trajectories
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    X01 = AMap1*delCOE_1; Xi1 = X01;
+    X02 = AMap1*delCOE_2; Xi2 = X02;
+    Xf1 = AMap2*delCOE_3;
+    Xf2 = AMap2*delCOE_4;
+    
+end 
+% -------------------------------------------------------------------------
 
 %% ------------------------ AutoDiff using CasADi -------------------------
 for j = 1
-    addpath('/Users/hermann/Desktop/casadi-osx-matlabR2015a-v3.5.5')
-    import casadi.*
-    opts = struct('main', true, 'mex', true);
-    t     = SX.sym('t');      Penalty = SX.sym('Penalty');
+    XChief= SX.sym('XC',6); t = SX.sym('t'); Penalty = SX.sym('Penalty');
     rho1  = SX.sym('rho1',6); rho2    = SX.sym('rho2',6);
     drho1 = SX.sym('rho1',6); drho2   = SX.sym('rho2',6);
     Xaug  = [rho1;rho2];      dXaug   = [drho1;drho2];
@@ -174,14 +274,13 @@ for j = 1
     for i = 1:Num_Agent
         idx = 1+N*(i-1):N*i;
         if strcmp(DynamicsModel,'THode')
-            drift(idx,1) =  NonDimentionalized_THode(t,Xaug(idx));
+            drift(idx,1) = NonDimentionalized_THodeCasADi(t,Xaug(idx),XChief);
         elseif strcmp(DynamicsModel,'CWode')
-            drift(idx,1) = NonDimentionalized_CWode(t,Xaug(idx));
+            drift(idx,1) = NonDimentionalized_CWodeCasADi(t,Xaug(idx),XChief);
         elseif strcmp(DynamicsModel,'NLode')
-            drift(idx,1) =  NonDimentionalized_NLode(t,Xaug(idx));
+            drift(idx,1) = NonDimentionalized_NLodeCasADi(t,Xaug(idx),XChief);
         end
     end
-    
     
     % Defining the metric, before adding the state constraint barrier functions
     H = (F_Aug.')^(-1)*D_Aug*F_Aug^(-1);
@@ -195,27 +294,29 @@ for j = 1
     % the metric with state constraint barier functions
     G = (sum(B)+1)*H;
     % actuated curve length
-    L = Function('L',{Xaug,dXaug,Penalty,t},...
+    L = Function('L',{Xaug,dXaug,Penalty,t,XChief},...
         {(dXaug - drift).' * G * (dXaug - drift)},...
-        {'X','dX','k','t'},...
+        {'X','dX','k','t','XChief'},...
         {'CurveLength'});
     dLdx = L.jacobian();
-    fdrift = Function('fdrift', {t,Xaug},...
+    fdrift = Function('fdrift', {t,Xaug,XChief},...
         {drift});
     
-    %% Rewrite the functions in c files
-    L.generate('L.c',opts);
-    dLdx.generate('dLdx.c',opts);
-    fdrift.generate('fdrift.c',opts);
-    
-    %% Generating Mex files from the c files
+    % Rewrite the functions in c files
+    L.generate('L.c',CasADiopts);
+    dLdx.generate('dLdx.c',CasADiopts);
+    fdrift.generate('fdrift.c',CasADiopts);
+
+    % Generating Mex files from the c files
     mex L.c -largeArrayDims
     mex dLdx.c -largeArrayDims
     mex fdrift.c -largeArrayDims
-    clear L dLdx fdrift
+    
+    clear L dLdx fdrift 
 end
 % -------------------------------------------------------------------------
 
+%% ------- Nondimentionalized the inital condition of the problem ---------
 for j = 1
     
     if strcmp(DynamicsModel,'THode')
@@ -225,18 +326,18 @@ for j = 1
         conts2 = -mu_Earth*e_chief*sin(f1)/(h^(3/2));
         conts3 = 1/conts1;
         A_map1 = [conts1*eye(3)       zeros(3);
-            conts2*eye(3)  conts3*eye(3)];
+                  conts2*eye(3)  conts3*eye(3)];
         x_bar01 = A_map1*X01;
         x_bar02 = A_map1*X02;
         X0  = [x_bar01; x_bar02];
-        tspan1  = 2*pi*T_normalized;
+        tspan1 = 2*pi*T_normalized;
         h      = sqrt(mu_Earth*a_chief*(1-e_chief^2));
         K_f    = 1+e_chief*cos(f2);
         conts1 = mu_Earth*K_f/(h^(3/2));
         conts2 = -mu_Earth*e_chief*sin(f2)/(h^(3/2)); 
         conts3 = 1/conts1;
         A_map2 = [conts1*eye(3)       zeros(3);
-            conts2*eye(3)  conts3*eye(3)];
+                  conts2*eye(3)  conts3*eye(3)];
         x_bar11 = A_map2*Xf1; 
         x_bar21 = A_map2*Xf2; 
         Xf = [x_bar11; x_bar21];
@@ -257,7 +358,7 @@ for j = 1
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
             conts3 = 1/conts1;
             A_inv1 = [conts1*eye(3)       zeros(3);
-                conts2*eye(3)  conts3*eye(3)];
+                      conts2*eye(3)  conts3*eye(3)];
             X_THpos0(i,:) = (A_inv1*X_rel_0(i,1:6).').';
             X_THpos1(i,:) = (A_inv1*X_rel_0(i,7:12).').';
             
@@ -268,7 +369,7 @@ for j = 1
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
             conts3 = 1/conts1;
             A_inv2 = [conts1*eye(3)       zeros(3);
-                conts2*eye(3)  conts3*eye(3)];
+                      conts2*eye(3)  conts3*eye(3)];
             X_THpos2(i,:) = (A_inv2*X_rel_1(i,1:6).').';
             X_THpos3(i,:) = (A_inv2*X_rel_1(i,7:12).').';
         end
@@ -283,61 +384,35 @@ for j = 1
          X_THpos01 = Tc*X_rel_0;
          X_THpos11 = Tc*X_rel_1;
              
-             
     elseif strcmp(DynamicsModel,'NLode')
-        X1 = [Rrho\X01(1:3); (Rrho\X01(4:6))*Tc];
-        X2 = [Rrho\X02(1:3); (Rrho\X02(4:6))*Tc];
-        X3 = [Rrho\Xf1(1:3); (Rrho\Xf1(4:6))*Tc];
-        X4 = [Rrho\Xf2(1:3); (Rrho\Xf2(4:6))*Tc];
-        X0 = [X1;X2];
-        Xf = [X3;X4];
+        X0 = [X01 X02];
+        Xf = [Xf1 Xf2];
         tic
         options = odeset('RelTol',2.22045e-9,'AbsTol',2.22045e-30);
-        [~, X_rel_0] = ode113(@(t,x)NonDimentionalized_NLode(t,x),T_normalized,X0,options);
-        [~, X_rel_1] = ode113(@(t,x)NonDimentionalized_NLode(t,x),T_normalized,Xf,options);
+        X_THpos01 = []; X_THpos11 = []; X_rel_0 = []; X_rel_1 = [];
+        for i = 1:2
+            X0integral = [X01,X02];
+            Xfintegral = [Xf1,Xf2];
+            [~, X_rel_01] = ode113(@(t,x)NonDimentionalized_NLode(t,x),T_normalized,X0(:,i),options);
+            [~, X_rel_11] = ode113(@(t,x)NonDimentionalized_NLode2(t,x),T_normalized,Xf(:,i),options);
+            
+            X_rel_0   = [X_rel_0, X_rel_01];  X_rel_1 = [X_rel_1, X_rel_11];
+            X_THpos01 = [X_THpos01, (Rrho*X_rel_01(:,1:3).').', (Rrho*X_rel_01(:,4:6).').'];
+            X_THpos11 = [X_THpos11, (Rrho*X_rel_11(:,1:3).').', (Rrho*X_rel_11(:,4:6).').'];
+        end
         toc
-        X_THpos01 = [(Rrho*X_rel_0(:,1:3).').', ((1/Tc)*Rrho*X_rel_0(:,4:6).').',...
-                     (Rrho*X_rel_0(:,7:9).').', ((1/Tc)*Rrho*X_rel_0(:,10:12).').'];
-        X_THpos11 = [(Rrho*X_rel_1(:,1:3).').', ((1/Tc)*Rrho*X_rel_1(:,4:6).').',...
-                     (Rrho*X_rel_1(:,7:9).').', ((1/Tc)*Rrho*X_rel_1(:,10:12).').'];
-               
+        X0 = X0(:); Xf = Xf(:);
     end
     
 end
 % -------------------------------------------------------------------------
-
-%%
-% generate functions for EL, metric G, drift term f, control matrix F
-% please modify this function if system is changed
-[get_EL, get_G, get_f, get_F] = generate_fh_of_model(Num_Agent); 
-
-%%
-clc
-k = 200*rand(1); x = rand(1);
-drift_CasADi = full(fdrift(x,X0));
-drift_model  = get_f(X0,0);
-test1 = drift_CasADi - drift_model
-
-dX0 = rand(12,1);
-LL = full(L(X0,dX0,k,x));
-CasADiresult = full(dLdx(X0,dX0,k,x,LL))';
-CasADir = [CasADiresult(1:12), CasADiresult(13:24)];
-EL = get_EL(X0,dX0,k,x);
-
-state  = dlarray(X0);
-dstate = dlarray(dX0);
-[pLx2,pLxd2] = dlfeval(@AutoDiff_Dynamics,state,dstate,k,x);
-
-test2 = CasADir - EL
-test3 = CasADir - [pLx2,pLxd2]
-
 
 %% ------------------------------------------------------------------------
 % ##################### Geometric Motion Planning #########################
 % -------------------------------------------------------------------------
 %% --------------------------- AGHF parameters ----------------------------
 for ll = 1
-    smax = 9e7; % Need tpo find an analytic way to solve for this value
+    smax = 9e9; % Need tpo find an analytic way to solve for this value
     % # of grids in t
     tgrids = 250;
     % # of grids in s
@@ -347,7 +422,7 @@ for ll = 1
     % # of inputs
     M = 3;  N  = length(X0);
     % penalty value (the lambda in paper)
-    Penalty = 2e4;
+    Penalty = 5e5;
     % tolerance of the integrator
     % opts = odeset('AbsTol',1e-14);
     opts = odeset('RelTol',2.22045e-8,'AbsTol',2.22045e-20);
@@ -466,7 +541,9 @@ for ll = 1
         elseif strcmp(DynamicsModel,'CWode')
             drift = NonDimentionalized_CWode(xnew(i),p(:,i));
         elseif strcmp(DynamicsModel,'NLode')
-            drift = NonDimentionalized_NLode(xnew(i),p(:,i));
+            d1 = NonDimentionalized_NLode(xnew(i),p(1:6,i));
+            d2 = NonDimentionalized_NLode(xnew(i),p(7:12,i));
+            drift = [d1;d2];
         end
         % get [Fc F], note: the F_bar matrix in paper
         Ffull = F;
@@ -481,28 +558,19 @@ for ll = 1
             elseif strcmp(DynamicsModel,'CWode')
                 Dim_Crtl(jj).u(:,i) = Tc*Crtl(jj).u(:,i);
             elseif strcmp(DynamicsModel,'NLode')
-                Dim_Crtl(jj).u(:,i) = (1/Tc)*Rrho*Crtl(jj).u(:,i);
+                Dim_Crtl(jj).u(:,i) = Rrho*Crtl(jj).u(:,i);
             end
         end
     end
+    
 end
 % -------------------------------------------------------------------------
-%%
-% for jj = 1:Num_Agent
-%     cMat0 = [c7;c4];
-%     idx = 1+mm*(jj-1):mm*jj;
-%     % plot3(p(idx(1),:),p(idx(2),:),p(idx(3),:),...
-%     %     '-.','Color',cMat0(jj,:),'LineWidth',2.5);
-%     plot3(sol(end,:,idx(1)),sol(end,:,idx(2)),sol(end,:,idx(3)),...
-%         '-.','Color',cMat0(jj,:),'LineWidth',2.5);
-% end
-
 
 %% ------------------ Integrate the system's trajectory -------------------
 for ll = 1
     disp('Integrating the resulting trajectory...');
-    tolerance = 1e-18;
-    dt = 1e-16;
+    tolerance = 1e-17;
+    dt = 1e-16; dt1 = 1e-16; dt2 = 1e-16;
     X_ode45(:,1) = X0;
     X_ode45_LVLH(:,1) = [Xi1;Xi2];
     Pint(:,1)         = [Xi1;Xi2];
@@ -512,14 +580,18 @@ for ll = 1
             Crt(:,jj) = Crtl(jj).u(:,i);
         end
         if strcmp(DynamicsModel,'THode')
-            [y_f, ~, dt_next] = Runge_Kutta_Fehlberg_4_5(@(t,X)TH_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+            [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)TH_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+            X_ode45(:,i+1) = y_f;
         elseif strcmp(DynamicsModel,'CWode')
-            [y_f, ~, dt_next] = Runge_Kutta_Fehlberg_4_5(@(t,X)CW_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+            [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)CW_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+            X_ode45(:,i+1) = y_f;
         elseif strcmp(DynamicsModel,'NLode')
-            [y_f, ~, dt_next] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+            [y_f1, ~, dt1] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X,Crt(:,1)),X_ode45(1:6,i),xnew(i),dt1,xnew(i+1),tolerance);
+            [y_f2, ~, dt2] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X,Crt(:,2)),X_ode45(7:12,i),xnew(i),dt2,xnew(i+1),tolerance);
+            X_ode45(:,i+1) = [y_f1;y_f2];
+            
         end
-        dt = dt_next;
-        X_ode45(:,i+1) = y_f;
+        
         Crt = nan(M,Num_Agent);
         
         if strcmp(DynamicsModel,'THode')
@@ -537,10 +609,8 @@ for ll = 1
             X_ode45_LVLH(:,i+1) = Tc*y_f;
             Pint(:,i+1)         = Tc*Pint(:,i+1);
         elseif strcmp(DynamicsModel,'NLode')
-            X_ode45_LVLH(:,i+1) = [Rrho*y_f(:,1:3); (1/Tc)*Rrho*y_f(:,4:6),...
-                                   Rrho*y_f(:,7:9); (1/Tc)*Rrho*y_f(:,10:12)];
-            Pint(:,i+1)         = [Rrho*Pint(1:3,i+1); (1/Tc)*Rrho*Pint(4:6,i+1),...
-                                   Rrho*Pint(7:9,i+1); (1/Tc)*Pint(10:12,i+1)];
+            X_ode45_LVLH(:,i+1) = [blkdiag(Rrho,Rrho)*y_f1; blkdiag(Rrho,Rrho)*y_f2]; 
+            Pint(:,i+1)         = [blkdiag(Rrho,Rrho)*Pint(1:6,i+1); blkdiag(Rrho,Rrho)*Pint(7:12,i+1)]; 
         end
     end
     disp('Done!!!!!');
@@ -804,16 +874,6 @@ end
 
 %% ------ Animation of the homotopy trasformation during convergence ------
 for k = 1
-    % close all
-    c1 = rgb('DarkGreen');
-    c2 = rgb('Gold');
-    c3 = rgb('Lime');
-    c4 = rgb('Orange');
-    c5 = rgb('DarkBlue');
-    c6 = rgb('Red');
-    c7 = rgb('DarkGray');
-    c8 = rgb('Bisque');
-    c9 = rgb('Teal');
     
     cMat1  = [c5;c6];
     cMat2 = [c3;c1];
@@ -938,9 +998,10 @@ end
 %% --------------------------- PDE for pdepe ------------------------------
 function [c,f,s] = mypdexpde(x,t,u,DuDx,k,N) % Define PDE; right-hand-side of AGHF
 
-
+XChief = full([Chief_x(x);  Chief_y(x);  Chief_z(x);...
+               Chief_dx(x); Chief_dy(x); Chief_dz(x)]);
 LL = full(L(u,DuDx,k,x));
-CasADiresult = full(dLdx(u,DuDx,k,x,LL))';
+CasADiresult = full(dLdx(u,DuDx,k,x,XChief,LL))';
 CasADir = [CasADiresult(1:12), CasADiresult(13:24)];
 
 
@@ -996,23 +1057,28 @@ qr = zeros(N,1);
 end
 % -------------------------------------------------------------------------
 
+
+%!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%!!!!!!!!!!!!!!!!!!!   Nondimetionalized Dynamics   !!!!!!!!!!!!!!!!!!!!!
+%!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 function [Xdot] = NonDimentionalized_NLode(t,X)
-global mu_Earth Rrho Tc Xnom T_normalized
+global mu_Earth Rrho Tc 
 format long
-X_chief = interp1(T_normalized,Xnom,t)';
+X_chief = full([Chief_x(t);  Chief_y(t);  Chief_z(t);...
+                Chief_dx(t); Chief_dy(t); Chief_dz(t)]);
 tilde = @(v) [0    -v(3)  v(2);
     v(3)   0   -v(1);
     -v(2)  v(1)    0];
 
-%% Collecting relevant quantities
-rt = X_chief(1:3); vt = X_chief(4:6); rt_norm = (rt.'*rt).^(1/2);
-rho_bar = X(1:3,:);  drho_bar = X(4:6,:);
+% Collecting relevant quantities
+rt = X_chief(1:3);  vt = X_chief(4:6); rt_norm = (rt.'*rt).^(1/2);
+rho_bar = X(1:3,:); drho_bar = X(4:6,:);
 
-%% Redimensionalizing the variables in the ODE
-rho = Rrho*rho_bar; rho_prime = (1/Tc)*Rrho*drho_bar;
-rc = [rt_norm; 0; 0] + rho; rc_norm =  (rc.'*rc).^(1/2);
+% Redimensionalizing the variables in the ODE
+rho = Rrho*rho_bar; rho_prime = Rrho*drho_bar;
+rc  = [rt_norm; 0; 0] + rho; rc_norm =  (rc.'*rc).^(1/2);
 
-%% Calculating the respective accelerations
+% Calculating the respective accelerations
 TN = DCM(rt,vt); % DCM's between target's RIC frame and ECI frame
 
 % Computing the angular velocity and angular acceleration of the target frame
@@ -1026,9 +1092,45 @@ Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
     - tilde(Omega)*(tilde(Omega)*rho) ...
     - tilde(Omegadot)*rho;
 
-%% Nondimetional relative ODE of the deputy
-Xdot(1:3,:) = drho_bar;
-Xdot(4:6,:) = (del_ag + Coriolis_Effect)*Tc^2; % inv(Rrho)*
+% Nondimetional relative ODE of the deputy
+Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
+Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc;
+
+end
+function [Xdot] = NonDimentionalized_NLode2(t,X)
+global mu_Earth Rrho Tc 
+format long
+X_chief = full([Chief_x1(t);  Chief_y1(t);  Chief_z1(t);...
+                Chief_dx1(t); Chief_dy1(t); Chief_dz1(t)]);
+tilde = @(v) [0    -v(3)  v(2);
+    v(3)   0   -v(1);
+    -v(2)  v(1)    0];
+
+% Collecting relevant quantities
+rt = X_chief(1:3);  vt = X_chief(4:6); rt_norm = (rt.'*rt).^(1/2);
+rho_bar = X(1:3,:); drho_bar = X(4:6,:);
+
+% Redimensionalizing the variables in the ODE
+rho = Rrho*rho_bar; rho_prime = Rrho*drho_bar;
+rc  = [rt_norm; 0; 0] + rho; rc_norm =  (rc.'*rc).^(1/2);
+
+% Calculating the respective accelerations
+TN = DCM(rt,vt); % DCM's between target's RIC frame and ECI frame
+
+% Computing the angular velocity and angular acceleration of the target frame
+h_vec = tilde(rt)*vt;
+Omega = TN*( h_vec/rt_norm^2);
+Omegadot = TN*( -2*(rt.'*vt)*h_vec/rt_norm^4 );
+
+% relative gravitationall acceleration and coriolis effects
+del_ag =  -mu_Earth/rc_norm^3*rc + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
+Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
+    - tilde(Omega)*(tilde(Omega)*rho) ...
+    - tilde(Omegadot)*rho;
+
+% Nondimetional relative ODE of the deputy
+Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
+Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc;
 
 end
 % -------------------------------------------------------------------------
@@ -1064,177 +1166,75 @@ Xdot = Xdot(:);
 end
 % -------------------------------------------------------------------------
 
-% generate functions for calculating EL equation:
 %!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%!!!!!!!!!!! Need to modify this function if system is changed !!!!!!!!!!
+%!!!!!!!!!!!!!!!!!!!!!!!!!   CasADi Functions   !!!!!!!!!!!!!!!!!!!!!!!!!
 %!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-function [get_EL, get_G, get_f, get_F] = generate_fh_of_model(AgentNum) 
-tic;
-disp('generating functions for pdepe...');
 
-% ------------------------- system setup ----------------------------------
-syms Penalty t
-global mu_dot Tc e_chief % 
+function [Xdot] = NonDimentionalized_NLodeCasADi(t,X,XChief)
+global mu_Earth Rrho Tc
+format long 
+tilde   = @(v) [0    -v(3)  v(2);
+                v(3)   0   -v(1);
+               -v(2)  v(1)    0];
+% Collecting relevant quantities
+rt = XChief(1:3); vt = XChief(4:6); rt_norm = (rt.'*rt).^(1/2);
+rho_bar = X(1:3,:); drho_bar = X(4:6,:);
+
+% Redimensionalizing the variables in the ODE
+rho = Rrho*rho_bar; rho_prime = Rrho*drho_bar;
+rc = [rt_norm; 0; 0] + rho; rc_norm =  (rc.'*rc).^(1/2);
+
+% Calculating the respective accelerations
+TN = DCM(rt,vt); % DCM's between target's RIC frame and ECI frame
+
+% Computing the angular velocity and angular acceleration of the target frame
+h_vec = tilde(rt)*vt;
+Omega = TN*( h_vec/rt_norm^2);
+Omegadot = TN*( -2*(rt.'*vt)*h_vec/rt_norm^4 );
+
+% relative gravitationall acceleration and coriolis effects
+del_ag =  -mu_Earth/rc_norm^3*rc + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
+Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
+    - tilde(Omega)*(tilde(Omega)*rho) ...
+    - tilde(Omegadot)*rho;
+
+% Nondimetional relative ODE of the deputy
+Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
+Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc;
+
+end
+% -------------------------------------------------------------------------
+
+function [Xdot] = NonDimentionalized_CWodeCasADi(t,X,XChief)
+global mu_dot Tc
+
+% Computing the CW control and dynamic matrices
 A  = [zeros(3) eye(3);
-      3*mu_dot^2 0 0 0 2*mu_dot 0;
-      0 0 0 -2*mu_dot 0 0;
-      0 0 -mu_dot^2 0 0 0]*Tc; % Partial derivative pFd the drift vector field
-% k = 1+e_chief*cos(t);
-% A = [zeros(3) eye(3);
-%     3/k  0  0   0   2  0;
-%     0    0  0   -2  0  0;
-%     0    0  -1  0   0  0];
-N = 6; M = 3;
-Xaug = []; dXaug = [];
-  % make the state and state deirvative simbolic
-  for i = 1:AgentNum
-      X_Variables{i} = [{strcat('x',num2str(i))},{strcat('y',num2str(i))},...
-          {strcat('z',num2str(i))},{strcat('xdot',num2str(i))},...
-          {strcat('ydot',num2str(i))},{strcat('zdot',num2str(i))}];
-      dX_Variables{i} = [{strcat('dx',num2str(i))},{strcat('dy',num2str(i))},...
-          {strcat('dz',num2str(i))},{strcat('dxdot',num2str(i))},...
-          {strcat('dydot',num2str(i))},{strcat('dzdot',num2str(i))}];
-      
-      if i == 1
-          AMat_Aug = A;
-          % [Fc F], note: the F_bar matrix in paper
-          F = sym(eye(N)); F_Aug = F;
-          % penalty matrix (D matrix in the paper)
-          D = diag([Penalty*ones(1,N-M) ones(1,M)]); D_Aug = D;
-      else
-          AMat_Aug = blkdiag(AMat_Aug,A);
-          F_Aug = blkdiag(F_Aug,F);
-          D_Aug = blkdiag(D_Aug,D);
-      end
-  end
-% syms x y z xdot ydot zdot  dx dy dz dxdot dydot dzdot Penalty real
-X1  = cell2sym( X_Variables{1}' ); assume(X1,'real')
-X2  = cell2sym( X_Variables{2}' ); assume(X2,'real')
-% X3  = cell2sym( X_Variables{3}' ); assume(X3,'real')
-% X4  = cell2sym( X_Variables{4}' ); assume(X4,'real')
-% X5  = cell2sym( X_Variables{5} );
-% X6  = cell2sym( X_Variables{6} );
+    3*mu_dot^2 0 0 0 2*mu_dot 0;
+    0 0 0 -2*mu_dot 0 0;
+    0 0 -mu_dot^2 0 0 0]*Tc;
 
-dX1 = cell2sym( dX_Variables{1}' ); assume(dX1,'real')
-dX2 = cell2sym( dX_Variables{2}' ); assume(dX2,'real')
-% dX3 = cell2sym( dX_Variables{3}' ); assume(dX3,'real')
-% dX4 = cell2sym( dX_Variables{4}' ); assume(dX4,'real')
-% dX5 = cell2sym( dX_Variables{5} );
-% dX6 = cell2sym( dX_Variables{6} );
-
-Xaug  = [X1(:);X2(:)]; %;X3(:);X4(:)]; % ;X5(:);X6(:)];
-dXaug = [dX1(:);dX2(:)]; %;dX3(:);dX4(:)]; % ;dX5(:);dX6(:)];
-
-
-% drift term f(x) note: Fd(x) is used in the paper
-f = AMat_Aug*Xaug;
-% the metric, before adding the state constraint barrier functions
-H = simplify( (F_Aug.')^(-1)*D_Aug*F_Aug^(-1) );
-
-
-% -------------------- state constraint barrier function ------------------
-% B is a vector of barrier function for 1 state constraint, each scaler state
-% constraint need 1 barrier function
-B = [];
-% barrier function parameters
-% kb = .01; % barrier function gain
-% pb = 1;   % order of barrier function
-
-% b is one penalty term for state constraint
-% b = 0; % no state contraintst
-% delt12 = X1(1:3) - X2(1:3); b12 = (delt12'*delt12 - (0.05)^2)/(delt12'*delt12)^pb;
-% delt13 = X1(1:3) - X3(1:3); b13 = (delt13'*delt13 - (0.05)^2)/(delt13'*delt13)^pb;
-% delt14 = X1(1:3) - X4(1:3); b14 = (delt14'*delt14 - (0.05)^2)/(delt14'*delt14)^pb;
-% delt23 = X2(1:3) - X3(1:3); b23 = (delt23'*delt23 - (0.05)^2)/(delt23'*delt23)^pb;
-% delt24 = X2(1:3) - X4(1:3); b24 = (delt24'*delt24 - (0.05)^2)/(delt24'*delt24)^pb;
-% delt34 = X3(1:3) - X4(1:3); b34 = (delt34'*delt34 - (0.05)^2)/(delt34'*delt34)^pb;
-% b = b12+b13+b14+b23+b24+b34;
-% b21 = kb/((0.5)^2 - norm(X1(1:3))^2)^pb;
-% b22 = kb/((0.5)^2 - norm(X2(1:3))^2)^pb;
-% b23 = kb/((0.5)^2 - norm(X3(1:3))^2)^pb;
-% b24 = kb/((0.5)^2 - norm(X4(1:3))^2)^pb;
-% b = b21 + b22 + b23 + b24;
-% b = kb/((2*pi/4)^2 - z2^2)^pb; %contraint on angular velocity, |z2|<pi/2
-% b = kb/(2^2 - z1^2)^pb; %contraint on translational velocity, |z1|<2
-% b = kb/(z1+2)^pb + kb/(2-z1)^pb; %contraint on translational velocity |z1|<2
-b = 0;
-B = [B b]; % attach the barrier function to B
-
-% -------------------- Metric and curve Length ----------------------------
-
-% the metric with state constraint barier functions
-G = (sum(B)+1)*H;
-% actuated curve length
-L = (dXaug - f).' * G * (dXaug - f) ;
-
-% -------------------- Function Generations -------------------------------
-
-% taking derivatives symbolically to get the EL euqation terms
-% pLx -- dL/dx
-% pLxd -- dL/d(x_dot)
-pLx  = sym('pLx', [N*AgentNum 1],'real');
-pLxd = sym('pLxd', [N*AgentNum 1],'real');
-for i=1:N*AgentNum
-    pLx(i)  = diff(L,Xaug(i));
-    pLxd(i) = diff(L,dXaug(i));
+% Reshaping the input into an 6 by n matrix
+[l,~] = size(X);
+X = reshape(X,6,l/6);
+Xdot = A*X;
+Xdot = Xdot(:);
 end
+% -------------------------------------------------------------------------
 
-% generate functions
-get_EL = matlabFunction([pLx, pLxd],'vars', {Xaug,dXaug,Penalty,t});
-get_G  = matlabFunction(G,'vars', {Xaug,Penalty});
-get_f  = matlabFunction(f,'vars',{Xaug,t});
-get_F  = matlabFunction(F,'vars',{Xaug});
-
-toc;
+function [Xdot] = NonDimentionalized_THodeCasADi(t,X,XChief)
+global e_chief
+k = 1+e_chief*cos(t);
+A = [zeros(3) eye(3);
+    3/k  0  0   0   2  0;
+    0    0  0   -2  0  0;
+    0    0  -1  0   0  0];
+[l,~] = size(X);
+X = reshape(X,6,l/6);
+Xdot = A*X;
+Xdot = Xdot(:);
 end
-
-function [Grad_x,Grad_dx] = AutoDiff_Dynamics(Xaug,dXaug,Penalty,t)
-global M Num_Agent DynamicsModel
-
-N = 6;
-for i = 1:Num_Agent
-    if i == 1
-        % [Fc F], note: the F_bar matrix in paper
-        F = eye(N); F_Aug = F;
-        % penalty matrix (D matrix in the paper)
-        D = diag([Penalty*ones(1,N-M) ones(1,M)]); D_Aug = D;
-    else
-        F_Aug = blkdiag(F_Aug,F);
-        D_Aug = blkdiag(D_Aug,D);
-    end
-end
-
-%% Defining the drift vector field
-for i = 1:Num_Agent
-    idx = 1+N*(i-1):N*i;
-    if strcmp(DynamicsModel,'THode')
-        drift(idx,1) =  NonDimentionalized_THode(t,Xaug(idx));
-    elseif strcmp(DynamicsModel,'CWode')
-        drift(idx,1) = NonDimentionalized_CWode(t,Xaug(idx));
-    elseif strcmp(DynamicsModel,'NLode')
-        drift(idx,1) =  NonDimentionalized_NLode(t,Xaug(idx));
-    end
-end
-
-
-%% Defining the metric, before adding the state constraint barrier functions
-H = (F_Aug.')^(-1)*D_Aug*F_Aug^(-1);
-
-%% ------------------- state constraint barrier function ------------------
-B = [];
-b = 0; % no state contraintst
-B = [B b]; % attach the barrier function to B
-
-% -------------------- Metric and curve Length ----------------------------
-% the metric with state constraint barier functions
-G = (sum(B)+1)*H;
-% actuated curve length
-L = (dXaug - drift).' * G * (dXaug - drift);
-
-Grad_x  = extractdata(dlgradient(L,Xaug));
-Grad_dx = extractdata(dlgradient(L,dXaug));
-
-end
+% -------------------------------------------------------------------------
 
 
 

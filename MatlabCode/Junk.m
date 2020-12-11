@@ -880,8 +880,235 @@ end
 
 
 
+% generate functions for EL, metric G, drift term f, control matrix F
+% please modify this function if system is changed
+[get_EL, get_G, get_f, get_F] = generate_fh_of_model(Num_Agent); 
 
 
+dX0 = rand(12,1); k = 200*rand(1); x = rand(1);
+XChief = full([Chief_x(x);  Chief_y(x);  Chief_z(x);...
+               Chief_dx(x); Chief_dy(x); Chief_dz(x)]);
+LL = full(L(X0,dX0,k,x,XChief));
+CasADiresult = full(dLdx(X0,dX0,k,x,XChief,LL))';
+CasADir = [CasADiresult(1:12), CasADiresult(13:24)];
+
+
+
+drift_CasADi = full(fdrift(x,X0,XChief));
+
+
+state  = dlarray(X0);
+dstate = dlarray(dX0);
+[pLx2,pLxd2] = dlfeval(@AutoDiff_Dynamics,state,dstate,k,x);
+
+test = CasADir - [pLx2,pLxd2]
+
+
+
+
+
+%%
+X_rel_0 = []; X_rel_1 = [];
+for i = 1:2
+    X0 = [X01,X02];
+    Xf = [Xf1,Xf2];
+    [~, X_rel_01] = ode113(@(t,x)NonDimentionalized_NLode(t,x),T_normalized,X0(:,i),options);
+    [~, X_rel_11] = ode113(@(t,x)NonDimentionalized_NLode2(t,x),T_normalized,Xf(:,i),options);
+    X_rel_0   = [X_rel_0, X_rel_01];  X_rel_1 = [X_rel_1, X_rel_11];
+end
+cMat1 = [c5;c6];
+cMat2 = [c3;c1];
+cMat0 = [c7;c4];
+for jj = 1:Num_Agent
+        idx = 1+mm*(jj-1):mm*jj;
+        plot3(X_rel_0(:,idx(1)),X_rel_0(:,idx(2)),X_rel_0(:,idx(3)),'Color',cMat1(jj,:),'DisplayName','Initial Traj');
+        hold on
+        plot3(X_rel_1(:,idx(1)),X_rel_1(:,idx(2)),X_rel_1(:,idx(3)),'Color',cMat2(jj,:));
+         plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
+            'LineWidth',3,...
+            'MarkerEdgeColor',cMat1(jj,:),...
+            'MarkerFaceColor',cMat1(jj,:)',...
+            'MarkerSize',8);
+        
+        
+        plot3(X_rel_1(1,idx(1)),X_rel_1(1,idx(2)),X_rel_1(1,idx(3)),'o',...
+            'LineWidth',3,...
+            'MarkerEdgeColor',cMat2(jj,:),...
+            'MarkerFaceColor',cMat2(jj,:),...
+            'MarkerSize',8);
+        
+        plot3(0,0,0,'bo',...
+            'LineWidth',2,...
+            'MarkerEdgeColor','k',...
+            'MarkerFaceColor','k',...
+            'MarkerSize',15);
+        grid on
+        
+end
+
+%%
+for ll = 1
+    disp('Extracting the required control...');
+    % initialize controls and states
+    Crtl = struct('u', cell(1, Num_Agent)); % actual control
+    % use spline to interpolate state from steady state pde solution, p
+    Pint   = zeros(N,xpoints_new);
+    p      = zeros(N,xpoints_new);
+    dpdx   = zeros(N,xpoints_new);
+    dx_new = diff([xnew(3),xnew,xnew(xpoints_new-2)]);
+    for i = 1:N
+        Pint(i,:) = spline(x,sol(1,:,i),xnew);
+        p(i,:)    = spline(x,sol(end,:,i),xnew);
+        % Numerically computing the time derivative of the state
+        dp_new    = diff([p(i,3),p(i,:),p(i,xpoints_new-2)]);
+        dpdx(i,:) = (dp_new(1:end-1)./dx_new(1:end-1).*dx_new(2:end) ...
+            + dp_new(2:end)./dx_new(2:end).*dx_new(1:end-1)) ...
+            ./ (dx_new(2:end)+dx_new(1:end-1));
+    end
+    for i = 1 : length(xnew)
+        if strcmp(DynamicsModel,'THode')
+            f      = xnew(i);
+            h      = sqrt(mu_Earth*a_chief*(1-e_chief^2));
+            K_f    = 1+e_chief*cos(f);
+            conts1 = h^(3/2)/(mu_Earth*K_f);
+            conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
+            conts3 = 1/conts1;
+            A_inv  = [conts1*eye(3)       zeros(3);
+                conts2*eye(3)  conts3*eye(3)];
+            
+            drift = NonDimentionalized_THode(xnew(i),p(:,i));
+        elseif strcmp(DynamicsModel,'CWode')
+            drift = NonDimentionalized_CWode(xnew(i),p(:,i));
+        elseif strcmp(DynamicsModel,'NLode')
+            d1 = NonDimentionalized_NLode(xnew(i),p(1:6,i));
+            d2 = NonDimentionalized_NLode(xnew(i),p(7:12,i));
+            drift = [d1;d2];
+        end
+        % get [Fc F], note: the F_bar matrix in paper
+        Ffull = F;
+        B = Ffull(:,M+1:end);
+        % Extracting/approximate the required control
+        for jj = 1:Num_Agent
+            idx = 1+mm*(jj-1):mm*jj;
+            Crtl(jj).u(:,i) = (B.'*B)\(B.') * ( dpdx(idx,i) - drift(idx) );
+            if strcmp(DynamicsModel,'THode')
+                Crtl_Aug = A_inv*[zeros(3,1); Crtl(jj).u(:,i)];
+                Dim_Crtl(jj).u(:,i) = Crtl_Aug(4:6);
+            elseif strcmp(DynamicsModel,'CWode')
+                Dim_Crtl(jj).u(:,i) = Tc*Crtl(jj).u(:,i);
+            elseif strcmp(DynamicsModel,'NLode')
+                Dim_Crtl(jj).u(:,i) = Rrho*Crtl(jj).u(:,i);
+            end
+        end
+    end
+    %%
+    if exist('u11','file') == 3
+        delete u11.c u11.mexmaci64
+    end
+    if exist('u12','file') == 3
+        delete u12.c u12.mexmaci64
+    end
+    if exist('u13','file') == 3
+        delete u13.c u13.mexmaci64
+    end
+    if exist('u21','file') == 3
+        delete u21.c u21.mexmaci64
+    end
+    if exist('u22','file') == 3
+        delete u22.c u22.mexmaci64
+    end
+    if exist('u23','file') == 3
+        delete u23.c u23.mexmaci64
+    end
+    
+    u11 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(1,:));
+    u12 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(2,:));
+    u13 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(3,:));
+    u21 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(1,:));
+    u22 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(2,:));
+    u23 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(3,:));
+    
+    u11.generate('u11.c',CasADiopts);
+    u12.generate('u12.c',CasADiopts);
+    u13.generate('u13.c',CasADiopts);
+    u21.generate('u21.c',CasADiopts);
+    u22.generate('u22.c',CasADiopts);
+    u23.generate('u23.c',CasADiopts);
+    mex u11.c -largeArrayDims
+    mex u12.c -largeArrayDims
+    mex u13.c -largeArrayDims
+    mex u21.c -largeArrayDims
+    mex u22.c -largeArrayDims
+    mex u23.c -largeArrayDims
+    clear u11 u12 u13 u21 u22 u23
+end
+% -------------------------------------------------------------------------
+
+%% ------------------ Integrate the system's trajectory -------------------
+for ll = 1
+    disp('Integrating the resulting trajectory...');
+    tolerance = 1e-17;
+    % dt = 1e-16; dt1 = 1e-16; dt2 = 1e-16;
+    % X_ode45(:,1) = X0;
+    % X_ode45_LVLH(:,1) = [Xi1;Xi2];
+    % Pint(:,1)         = [Xi1;Xi2];
+    
+    if strcmp(DynamicsModel,'THode')
+        [~,X_ode45] = ode113(@(t,x)TH_ode(t,x),xnew,X0,options);
+    elseif strcmp(DynamicsModel,'CWode')
+        [~,X_ode45] = ode113(@(t,x)CW_ode(t,x),xnew,X0,options);
+    elseif strcmp(DynamicsModel,'NLode')
+        [~,X_ode45_1] = ode113(@(t,x)NL_ode(t,x,1),xnew,Xi1,options);
+        [~,X_ode45_2] = ode113(@(t,x)NL_ode(t,x,2),xnew,Xi2,options);
+        X_ode45 = [X_ode45_1 X_ode45_1];
+    end
+    
+    % Crt = nan(M,Num_Agent);
+    
+    % for jj = 1:Num_Agent
+    %     U1 = [u11(i) u12(i) u13(i)];
+    %     U2 = [u21(i) u22(i) u23(i)];
+    %     Crt(:,jj) = [U1 U2]; %Crtl(jj).u(:,i);
+    % end
+    % if strcmp(DynamicsModel,'THode')
+    %     [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)TH_ode(t,X),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+    %     X_ode45(:,i+1) = y_f;
+    % elseif strcmp(DynamicsModel,'CWode')
+    %     [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)CW_ode(t,X),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
+    %     X_ode45(:,i+1) = y_f;
+    % elseif strcmp(DynamicsModel,'NLode')
+    %     [y_f1, ~, dt1] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X),X_ode45(1:6,i),xnew(i),dt1,xnew(i+1),tolerance);
+    %     [y_f2, ~, dt2] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X),X_ode45(7:12,i),xnew(i),dt2,xnew(i+1),tolerance);
+    %     X_ode45(:,i+1) = [y_f1;y_f2];
+    %
+    % end
+    
+    % Crt = nan(M,Num_Agent);
+    
+    if strcmp(DynamicsModel,'THode')
+        for i = 1:length(xnew)-1
+            f      = xnew(i+1);
+            h      = sqrt(mu_Earth*a_chief*(1-e_chief^2));
+            K_f    = 1+e_chief*cos(f);
+            conts1 = h^(3/2)/(mu_Earth*K_f);
+            conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
+            conts3 = 1/conts1;
+            A_inv  = [conts1*eye(3)       zeros(3);
+                conts2*eye(3)  conts3*eye(3)];
+            X_ode45_LVLH(:,i+1) = (blkdiag(A_inv,A_inv)*X_ode45_1(i+1,:).').';
+            Pint(:,i+1)         = blkdiag(A_inv,A_inv)*Pint(:,i+1);
+        end
+    elseif strcmp(DynamicsModel,'CWode')
+        X_ode45_LVLH = Tc*X_ode45;
+        Pint         = Tc*Pint;
+    elseif strcmp(DynamicsModel,'NLode')
+        X_ode45_LVLH = [(blkdiag(Rrho,Rrho)*X_ode45_1.').'; (blkdiag(Rrho,Rrho)*X_ode45_2.').'];
+        Pint         = [blkdiag(Rrho,Rrho)*Pint(1:6,:); blkdiag(Rrho,Rrho)*Pint(7:12,:)];
+    end
+    
+    disp('Done!!!!!');
+end
+% -------------------------------------------------------------------------
 
 
 
