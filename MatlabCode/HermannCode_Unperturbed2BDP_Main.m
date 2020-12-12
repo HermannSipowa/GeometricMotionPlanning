@@ -47,7 +47,7 @@ Num_Agent2 = 1; % Number of agents in the second final-orbit
 % Specifying the chief's orbit
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a_chief      = 1.42e4;   % Semi-major axis in Km
-e_chief      = 0.75;      % Eccentricity
+e_chief      = 0.5;      % Eccentricity
 inc_chief    = 50;       % Inclination in deg0
 BigOmg_chief = 10;       % RAAN in deg
 LitOmg_chief = 10;       % AOP in deg
@@ -418,11 +418,11 @@ for ll = 1
     % # of grids in s
     sgrids = 250;
     % # of grids of integration for final trajectory extraction
-    intgrids = 5e4;
+    intgrids = 1e4;
     % # of inputs
     M = 3;  N  = length(X0);
     % penalty value (the lambda in paper)
-    Penalty = 5e7;
+    Penalty = 5e5;
     % tolerance of the integrator
     % opts = odeset('AbsTol',1e-14);
     opts = odeset('RelTol',2.22045e-8,'AbsTol',2.22045e-20);
