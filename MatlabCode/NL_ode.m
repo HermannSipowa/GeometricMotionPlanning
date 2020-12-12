@@ -3,7 +3,13 @@ global mu_Earth Rrho Tc
 
 format long
 X_chief = full([Chief_x(t);  Chief_y(t);  Chief_z(t);...
-                Chief_dx(t); Chief_dy(t); Chief_dz(t)]);
+    Chief_dx(t); Chief_dy(t); Chief_dz(t)]);
+if agent == 1
+    u = [u11(t) u12(t) u13(t)]';
+elseif agent == 2
+    u = [u21(t) u22(t) u23(t)]';
+end
+
 tilde = @(v) [0    -v(3)  v(2);
     v(3)   0   -v(1);
     -v(2)  v(1)    0];
@@ -27,8 +33,8 @@ Omegadot = TN*( -2*(rt.'*vt)*h_vec/rt_norm^4 );
 % relative gravitationall acceleration and coriolis effects
 del_ag =  -mu_Earth/rc_norm^3*rc + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
 Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
-                  - tilde(Omega)*(tilde(Omega)*rho) ...
-                  - tilde(Omegadot)*rho;
+    - tilde(Omega)*(tilde(Omega)*rho) ...
+    - tilde(Omegadot)*rho;
 
 % Nondimetional relative ODE of the deputy
 

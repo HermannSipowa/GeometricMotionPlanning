@@ -1043,6 +1043,10 @@ for ll = 1
     clear u11 u12 u13 u21 u22 u23
 end
 % -------------------------------------------------------------------------
+for i = 1 : length(xnew)
+    u1test = [u11(i) u12(i) u13(i)]';
+end
+plot(xnew,u1test)
 
 %% ------------------ Integrate the system's trajectory -------------------
 for ll = 1
@@ -1060,7 +1064,7 @@ for ll = 1
     elseif strcmp(DynamicsModel,'NLode')
         [~,X_ode45_1] = ode113(@(t,x)NL_ode(t,x,1),xnew,Xi1,options);
         [~,X_ode45_2] = ode113(@(t,x)NL_ode(t,x,2),xnew,Xi2,options);
-        X_ode45 = [X_ode45_1 X_ode45_1];
+        X_ode45 = [X_ode45_1 X_ode45_2];
     end
     
     % Crt = nan(M,Num_Agent);

@@ -47,7 +47,7 @@ Num_Agent2 = 1; % Number of agents in the second final-orbit
 % Specifying the chief's orbit
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 a_chief      = 1.42e4;   % Semi-major axis in Km
-e_chief      = 0.5;      % Eccentricity
+e_chief      = 0.75;      % Eccentricity
 inc_chief    = 50;       % Inclination in deg0
 BigOmg_chief = 10;       % RAAN in deg
 LitOmg_chief = 10;       % AOP in deg
@@ -316,6 +316,9 @@ for j = 1
 end
 % -------------------------------------------------------------------------
 
+%% ------------------------------------------------------------------------
+% ##################### Geometric Motion Planning #########################
+% -------------------------------------------------------------------------
 %% ------- Nondimentionalized the inital condition of the problem ---------
 for j = 1
     
@@ -407,9 +410,6 @@ for j = 1
 end
 % -------------------------------------------------------------------------
 
-%% ------------------------------------------------------------------------
-% ##################### Geometric Motion Planning #########################
-% -------------------------------------------------------------------------
 %% --------------------------- AGHF parameters ----------------------------
 for ll = 1
     smax = 9e9; % Need tpo find an analytic way to solve for this value
@@ -418,11 +418,11 @@ for ll = 1
     % # of grids in s
     sgrids = 250;
     % # of grids of integration for final trajectory extraction
-    intgrids = 1e4;
+    intgrids = 5e4;
     % # of inputs
     M = 3;  N  = length(X0);
     % penalty value (the lambda in paper)
-    Penalty = 5e5;
+    Penalty = 5e7;
     % tolerance of the integrator
     % opts = odeset('AbsTol',1e-14);
     opts = odeset('RelTol',2.22045e-8,'AbsTol',2.22045e-20);
@@ -562,40 +562,66 @@ for ll = 1
             end
         end
     end
+
+    if exist('u11','file') == 3
+        delete u11.c u11.mexmaci64
+    end
+    if exist('u12','file') == 3
+        delete u12.c u12.mexmaci64
+    end
+    if exist('u13','file') == 3
+        delete u13.c u13.mexmaci64
+    end
+    if exist('u21','file') == 3
+        delete u21.c u21.mexmaci64
+    end
+    if exist('u22','file') == 3
+        delete u22.c u22.mexmaci64
+    end
+    if exist('u23','file') == 3
+        delete u23.c u23.mexmaci64
+    end
     
+    u11 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(1,:));
+    u12 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(2,:));
+    u13 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(3,:));
+    u21 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(1,:));
+    u22 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(2,:));
+    u23 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(3,:));
+    
+    u11.generate('u11.c',CasADiopts);
+    u12.generate('u12.c',CasADiopts);
+    u13.generate('u13.c',CasADiopts);
+    u21.generate('u21.c',CasADiopts);
+    u22.generate('u22.c',CasADiopts);
+    u23.generate('u23.c',CasADiopts);
+    mex u11.c -largeArrayDims
+    mex u12.c -largeArrayDims
+    mex u13.c -largeArrayDims
+    mex u21.c -largeArrayDims
+    mex u22.c -largeArrayDims
+    mex u23.c -largeArrayDims
+    clear u11 u12 u13 u21 u22 u23
 end
+
 % -------------------------------------------------------------------------
 
 %% ------------------ Integrate the system's trajectory -------------------
 for ll = 1
     disp('Integrating the resulting trajectory...');
-    tolerance = 1e-17;
-    dt = 1e-16; dt1 = 1e-16; dt2 = 1e-16;
-    X_ode45(:,1) = X0;
-    X_ode45_LVLH(:,1) = [Xi1;Xi2];
-    Pint(:,1)         = [Xi1;Xi2];
-    Crt = nan(M,Num_Agent);
-    for i = 1:length(xnew)-1
-        for jj = 1:Num_Agent
-            Crt(:,jj) = Crtl(jj).u(:,i);
-        end
-        if strcmp(DynamicsModel,'THode')
-            [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)TH_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
-            X_ode45(:,i+1) = y_f;
-        elseif strcmp(DynamicsModel,'CWode')
-            [y_f, ~, dt] = Runge_Kutta_Fehlberg_4_5(@(t,X)CW_ode(t,X,Crt),X_ode45(:,i),xnew(i),dt,xnew(i+1),tolerance);
-            X_ode45(:,i+1) = y_f;
-        elseif strcmp(DynamicsModel,'NLode')
-            [y_f1, ~, dt1] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X,Crt(:,1)),X_ode45(1:6,i),xnew(i),dt1,xnew(i+1),tolerance);
-            [y_f2, ~, dt2] = Runge_Kutta_Fehlberg_4_5(@(t,X)NL_ode(t,X,Crt(:,2)),X_ode45(7:12,i),xnew(i),dt2,xnew(i+1),tolerance);
-            X_ode45(:,i+1) = [y_f1;y_f2];
-            
-        end
-        
-        Crt = nan(M,Num_Agent);
-        
-        if strcmp(DynamicsModel,'THode')
-            f      = xnew(i+1);
+    if strcmp(DynamicsModel,'THode')
+        [~,X_ode45] = ode113(@(t,x)TH_ode(t,x),xnew,X0,options);
+    elseif strcmp(DynamicsModel,'CWode')
+        [~,X_ode45] = ode113(@(t,x)CW_ode(t,x),xnew,X0,options);
+    elseif strcmp(DynamicsModel,'NLode')
+        [~,X_ode45_1] = ode113(@(t,x)NL_ode(t,x,1),xnew,X0(1:6),options);
+        [~,X_ode45_2] = ode113(@(t,x)NL_ode(t,x,2),xnew,X0(7:12),options);
+        X_ode45 = [X_ode45_1 X_ode45_2];
+    end
+    
+    if strcmp(DynamicsModel,'THode')
+        for i = 1:length(xnew)
+            f      = xnew(i);
             h      = sqrt(mu_Earth*a_chief*(1-e_chief^2));
             K_f    = 1+e_chief*cos(f);
             conts1 = h^(3/2)/(mu_Earth*K_f);
@@ -603,19 +629,19 @@ for ll = 1
             conts3 = 1/conts1;
             A_inv  = [conts1*eye(3)       zeros(3);
                 conts2*eye(3)  conts3*eye(3)];
-            X_ode45_LVLH(:,i+1) = blkdiag(A_inv,A_inv)*y_f;
-            Pint(:,i+1)         = blkdiag(A_inv,A_inv)*Pint(:,i+1);
-        elseif strcmp(DynamicsModel,'CWode')
-            X_ode45_LVLH(:,i+1) = Tc*y_f;
-            Pint(:,i+1)         = Tc*Pint(:,i+1);
-        elseif strcmp(DynamicsModel,'NLode')
-            X_ode45_LVLH(:,i+1) = [blkdiag(Rrho,Rrho)*y_f1; blkdiag(Rrho,Rrho)*y_f2]; 
-            Pint(:,i+1)         = [blkdiag(Rrho,Rrho)*Pint(1:6,i+1); blkdiag(Rrho,Rrho)*Pint(7:12,i+1)]; 
+            X_ode45_LVLH(i,:) = (blkdiag(A_inv,A_inv)*X_ode45(i,:).').';
+            Pint(:,i)         = blkdiag(A_inv,A_inv)*Pint(:,i);
         end
+    elseif strcmp(DynamicsModel,'CWode')
+        X_ode45_LVLH = Tc*X_ode45;
+        Pint         = Tc*Pint;
+    elseif strcmp(DynamicsModel,'NLode')
+        X_ode45_LVLH = [(blkdiag(Rrho,Rrho)*X_ode45_1.').' (blkdiag(Rrho,Rrho)*X_ode45_2.').'];
+        Pint         = [blkdiag(Rrho,Rrho)*Pint(1:6,:); blkdiag(Rrho,Rrho)*Pint(7:12,:)];
     end
+    
     disp('Done!!!!!');
 end
-% -------------------------------------------------------------------------
 
 %% ------------------------------------------------------------------------
 % ######################## Plotting Results ###############################
@@ -725,7 +751,7 @@ for ll = 1
     for jj = 1:Num_Agent
         idx = 1+mm*(jj-1):mm*jj;
         
-        plt0(:,jj) = plot3(X_ode45(idx(1),:),X_ode45(idx(2),:),X_ode45(idx(3),:),...
+        plt0(:,jj) = plot3(X_ode45(:,idx(1)),X_ode45(:,idx(2)),X_ode45(:,idx(3)),...
             '--','Color',cMat0(jj,:),'LineWidth',2.5);
         
         plt1(:,jj) = plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
@@ -804,7 +830,7 @@ for ll = 1
     
     for jj = 1:Num_Agent
         idx = 1+mm*(jj-1):mm*jj;
-        plt0(:,jj) = plot3(X_ode45_LVLH(idx(1),:),X_ode45_LVLH(idx(2),:),X_ode45_LVLH(idx(3),:),...
+        plt0(:,jj) = plot3(X_ode45_LVLH(:,idx(1)),X_ode45_LVLH(:,idx(2)),X_ode45_LVLH(:,idx(3)),...
             '-.','Color',cMat0(jj,:),'LineWidth',2.5);
         
         plt1(:,jj) = plot3(X_THpos01(1,idx(1)),X_THpos01(1,idx(2)),X_THpos01(1,idx(3)),'*',...
@@ -887,7 +913,7 @@ for k = 1
     for jj = 1:Num_Agent
         idx = 1+mm*(jj-1):mm*jj;
         
-        plt0(:,jj) = plot3(X_ode45(idx(1),:),X_ode45(idx(2),:),X_ode45(idx(3),:),...
+        plt0(:,jj) = plot3(X_ode45(:,idx(1)),X_ode45(:,idx(2)),X_ode45(:,idx(3)),...
             '--','Color',cMat0(jj,:),'LineWidth',2.5);
         
         plt1(:,jj) = plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
