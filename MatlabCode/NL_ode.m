@@ -40,6 +40,6 @@ Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
 
 B = [zeros(3); eye(3)];
 Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
-Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc + B*u;
+Xdot = (blkdiag(Rrho,Rrho)\Xdot + B*u)*Tc ;
 
 end

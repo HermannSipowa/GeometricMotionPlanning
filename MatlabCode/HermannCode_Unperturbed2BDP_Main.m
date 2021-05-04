@@ -1,7 +1,7 @@
 %--------------------------------------------------------------------------
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% Hermann Kaptui Sipowa
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%% Hermann Kaptui Sipowa %%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %--------------------------------------------------------------------------
 clear
 close all
@@ -9,11 +9,11 @@ start_up
 format long e
 clc
 global mu_Earth tspan M T_normalized mu_dot ...
-    Rrho Tc Num_Agent a_chief e_chief DynamicsModel ...
-    Period % iteration InitalCondition
+    Num_Agent a_chief e_chief DynamicsModel ...
+    Period Rrho Tc  % iteration InitalCondition
 
 c1  = rgb('DarkGreen');
-c2  = rgb('Gold');
+c2  = rgb('DarkSlateGray');
 c3  = rgb('Lime');
 c4  = rgb('DarkOrange');
 c5  = rgb('DarkBlue');
@@ -35,7 +35,7 @@ CasADiopts = struct('main', true, 'mex', true);
 % - THode = Tschauner-Hempel , 
 % - NLode = Full Nonlinear Model 
 DynamicsModel = 'NLode';
-SimTime    = 0.75;
+SimTime = 0.75;
 
 %% Calculating the boundaries conditions
 %=======================================%
@@ -52,7 +52,6 @@ inc_chief    = 50;       % Inclination in deg0
 BigOmg_chief = 10;       % RAAN in deg
 LitOmg_chief = 10;       % AOP in deg
 M_chief1     = 0;        % Initial mean anomaly
-M_chief2     = (2*pi)*SimTime;  % Final mean anomaly
 OE_Chief     = [a_chief,e_chief,inc_chief,...
                 BigOmg_chief,LitOmg_chief,M_chief1];
 
@@ -60,8 +59,7 @@ OE_Chief     = [a_chief,e_chief,inc_chief,...
 %% Integrating the chief's trajectory
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
 Period  = (2*pi)*sqrt(a_chief^3/mu_Earth);
-PNum    = 1;
-IntTime = PNum*Period;
+IntTime = SimTime*Period;
 tspan   = linspace(0,IntTime,1e4);
 options = odeset('RelTol',2.22045e-14,'AbsTol',2.22045e-17);
 mu_dot  = sqrt(mu_Earth/a_chief^3); % Chief's mean motion
@@ -71,12 +69,12 @@ LitOmg_chief = deg2rad(LitOmg_chief); M_chief1 = deg2rad(M_chief1);
 COE1 = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief1];
 [Position_target1,Velocity_target1] = COEstoRV(COE1,mu_Earth);
 X0_Chief1  = [Position_target1; Velocity_target1];
-[~, Xnom1] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief1,options);
+[~, Xnom] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief1,options);
 
-COE2 = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief2];
-[Position_target2,Velocity_target2] = COEstoRV(COE2,mu_Earth);
-X0_Chief2  = [Position_target2; Velocity_target2];
-[~, Xnom2] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),tspan,X0_Chief2,options);
+Ttraj = linspace(0,Period,1e4); X0_Chief2  = Xnom(end,:)'; 
+[~, Xnom0] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),Ttraj,X0_Chief1,options);
+[~, Xnomf] = ode113(@(t,X)M2BodyOde(t,X,mu_Earth),Ttraj,X0_Chief2,options);
+
 
 %% ------- Create MX files to interpolate the chief's states (Xnom) -------
 for i = 1
@@ -99,12 +97,12 @@ for i = 1
         delete Chief_dz.c Chief_dz.mexmaci64
     end
     
-    Chief_x  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,1)');
-    Chief_y  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,2)');
-    Chief_z  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,3)');
-    Chief_dx = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,4)');
-    Chief_dy = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,5)');
-    Chief_dz = casadi.interpolant('XChief','bspline',{T_normalized},Xnom1(:,6)');
+    Chief_x  = casadi.interpolant('Chief_x','bspline',{T_normalized},Xnom(:,1)');
+    Chief_y  = casadi.interpolant('Chief_y','bspline',{T_normalized},Xnom(:,2)');
+    Chief_z  = casadi.interpolant('Chief_z','bspline',{T_normalized},Xnom(:,3)');
+    Chief_dx = casadi.interpolant('Chief_dx','bspline',{T_normalized},Xnom(:,4)');
+    Chief_dy = casadi.interpolant('Chief_dy','bspline',{T_normalized},Xnom(:,5)');
+    Chief_dz = casadi.interpolant('Chief_dz','bspline',{T_normalized},Xnom(:,6)');
     
     Chief_x.generate('Chief_x.c',CasADiopts);
     Chief_y.generate('Chief_y.c',CasADiopts);
@@ -122,64 +120,101 @@ for i = 1
     
     
     if strcmp(DynamicsModel,'NLode')
-        if exist('Chief_x1','file') == 3
-            delete Chief_x1.c Chief_x1.mexmaci64
+        if exist('Chief_x0','file') == 3
+            delete Chief_x0.c Chief_x0.mexmaci64
         end
-        if exist('Chief_y1','file') == 3
-            delete Chief_y1.c Chief_y1.mexmaci64
+        if exist('Chief_y0','file') == 3
+            delete Chief_y0.c Chief_y0.mexmaci64
         end
-        if exist('Chief_z1','file') == 3
-            delete Chief_z1.c Chief_z1.mexmaci64
+        if exist('Chief_z0','file') == 3
+            delete Chief_z0.c Chief_z0.mexmaci64
         end
-        if exist('Chief_dx1','file') == 3
-            delete Chief_dx1.c Chief_dx1.mexmaci64
+        if exist('Chief_dx0','file') == 3
+            delete Chief_dx0.c Chief_dx0.mexmaci64
         end
-        if exist('Chief_dy1','file') == 3
-            delete Chief_dy1.c Chief_dy1.mexmaci64
+        if exist('Chief_dy0','file') == 3
+            delete Chief_dy0.c Chief_dy0.mexmaci64
         end
-        if exist('Chief_dz1','file') == 3
-            delete Chief_dz1.c Chief_dz1.mexmaci64
+        if exist('Chief_dz0','file') == 3
+            delete Chief_dz0.c Chief_dz0.mexmaci64
+        end
+        TT = Ttraj/Tc;
+        Chief_x0  = casadi.interpolant('Chief_x0','bspline',{TT},Xnom0(:,1)');
+        Chief_y0  = casadi.interpolant('Chief_y0','bspline',{TT},Xnom0(:,2)');
+        Chief_z0  = casadi.interpolant('Chief_z0','bspline',{TT},Xnom0(:,3)');
+        Chief_dx0 = casadi.interpolant('Chief_dx0','bspline',{TT},Xnom0(:,4)');
+        Chief_dy0 = casadi.interpolant('Chief_dy0','bspline',{TT},Xnom0(:,5)');
+        Chief_dz0 = casadi.interpolant('Chief_dz0','bspline',{TT},Xnom0(:,6)');
+        
+        Chief_x0.generate('Chief_x0.c',CasADiopts);
+        Chief_y0.generate('Chief_y0.c',CasADiopts);
+        Chief_z0.generate('Chief_z0.c',CasADiopts);
+        Chief_dx0.generate('Chief_dx0.c',CasADiopts);
+        Chief_dy0.generate('Chief_dy0.c',CasADiopts);
+        Chief_dz0.generate('Chief_dz0.c',CasADiopts);
+        mex Chief_x0.c -largeArrayDims
+        mex Chief_y0.c -largeArrayDims
+        mex Chief_z0.c -largeArrayDims
+        mex Chief_dx0.c -largeArrayDims
+        mex Chief_dy0.c -largeArrayDims
+        mex Chief_dz0.c -largeArrayDims
+        clear Chief_x0 Chief_y0 Chief_z0 Chief_dx0 Chief_dy0 Chief_dz0
+    
+        
+        if exist('Chief_xf','file') == 3
+            delete Chief_xf.c Chief_xf.mexmaci64
+        end
+        if exist('Chief_yf','file') == 3
+            delete Chief_yf.c Chief_yf.mexmaci64
+        end
+        if exist('Chief_zf','file') == 3
+            delete Chief_zf.c Chief_zf.mexmaci64
+        end
+        if exist('Chief_dxf','file') == 3
+            delete Chief_dxf.c Chief_dxf.mexmaci64
+        end
+        if exist('Chief_dyf','file') == 3
+            delete Chief_dyf.c Chief_dyf.mexmaci64
+        end
+        if exist('Chief_dzf','file') == 3
+            delete Chief_dzf.c Chief_dzf.mexmaci64
         end
         
-        Chief_x1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,1)');
-        Chief_y1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,2)');
-        Chief_z1  = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,3)');
-        Chief_dx1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,4)');
-        Chief_dy1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,5)');
-        Chief_dz1 = casadi.interpolant('XChief','bspline',{T_normalized},Xnom2(:,6)');
+        Chief_xf  = casadi.interpolant('Chief_xf','bspline',{TT},Xnomf(:,1)');
+        Chief_yf  = casadi.interpolant('Chief_yf','bspline',{TT},Xnomf(:,2)');
+        Chief_zf  = casadi.interpolant('Chief_zf','bspline',{TT},Xnomf(:,3)');
+        Chief_dxf = casadi.interpolant('Chief_dxf','bspline',{TT},Xnomf(:,4)');
+        Chief_dyf = casadi.interpolant('Chief_dyf','bspline',{TT},Xnomf(:,5)');
+        Chief_dzf = casadi.interpolant('Chief_dzf','bspline',{TT},Xnomf(:,6)');
         
-        Chief_x1.generate('Chief_x1.c',CasADiopts);
-        Chief_y1.generate('Chief_y1.c',CasADiopts);
-        Chief_z1.generate('Chief_z1.c',CasADiopts);
-        Chief_dx1.generate('Chief_dx1.c',CasADiopts);
-        Chief_dy1.generate('Chief_dy1.c',CasADiopts);
-        Chief_dz1.generate('Chief_dz1.c',CasADiopts);
-        mex Chief_x1.c -largeArrayDims
-        mex Chief_y1.c -largeArrayDims
-        mex Chief_z1.c -largeArrayDims
-        mex Chief_dx1.c -largeArrayDims
-        mex Chief_dy1.c -largeArrayDims
-        mex Chief_dz1.c -largeArrayDims
-        clear Chief_x1 Chief_y1 Chief_z1 Chief_dx1 Chief_dy1 Chief_dz1
+        Chief_xf.generate('Chief_xf.c',CasADiopts);
+        Chief_yf.generate('Chief_yf.c',CasADiopts);
+        Chief_zf.generate('Chief_zf.c',CasADiopts);
+        Chief_dxf.generate('Chief_dxf.c',CasADiopts);
+        Chief_dyf.generate('Chief_dyf.c',CasADiopts);
+        Chief_dzf.generate('Chief_dzf.c',CasADiopts);
+        mex Chief_xf.c -largeArrayDims
+        mex Chief_yf.c -largeArrayDims
+        mex Chief_zf.c -largeArrayDims
+        mex Chief_dxf.c -largeArrayDims
+        mex Chief_dyf.c -largeArrayDims
+        mex Chief_dzf.c -largeArrayDims
+        clear Chief_xf Chief_yf Chief_zf Chief_dxf Chief_dyf Chief_dzf
     end
 end 
 % -------------------------------------------------------------------------
 
 %% --------------- Setting the deputy initial conditions ------------------
 for i = 1
-    M_chief1 = 0;
-    COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief1];
-    [~,~,f1] = COEstoRV(COE,mu_Earth);
+    r0 = Xnom0(1,1:3)'; v0 = Xnom0(1,4:6)';
+    COE0 = RVtoCOEs(r0,v0,mu_Earth); f1 = COE0(6);
     q1_chief = e_chief*cos(LitOmg_chief); q2_chief = e_chief*sin(LitOmg_chief);
-    % f1 = 0;
     theta_chief1 = f1+LitOmg_chief;
     OE_chief1 = [a_chief, theta_chief1, inc_chief, q1_chief, q2_chief, BigOmg_chief];
     AMap1 = ForwardMapping(OE_chief1, mu_Earth); % Linear mapping matrix
     
-    M_chief2 = (2*pi)*SimTime;
-    COE = [a_chief,e_chief,inc_chief,BigOmg_chief,LitOmg_chief,M_chief2];
-    [~,~,f2] = COEstoRV(COE,mu_Earth);
-    % f2 = (2*pi)*SimTime;
+    rf = Xnomf(1,1:3)'; vf = Xnomf(1,4:6)';
+    COEf = RVtoCOEs(rf,vf,mu_Earth); f2 = COEf(6);
     theta_chief2 = f2+LitOmg_chief;
     OE_chief2 = [a_chief, theta_chief2, inc_chief, q1_chief, q2_chief, BigOmg_chief];
     AMap2 = ForwardMapping(OE_chief2, mu_Earth); % Linear mapping matrix
@@ -198,11 +233,11 @@ for i = 1
     delCOE_1 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
     
     
-    dele1 = -1/(8*a_chief);
-    deli1 = -1/(20*a_chief);
-    delLitOmg = -5*pi*1E-7;
-    delBigOmg = pi*1E-6;
-    delM = 0;
+    dele1 = 1/(8*a_chief);
+    deli1 = 2/(10*a_chief);
+    delLitOmg = pi*1E-5;
+    delBigOmg = -pi*1E-5;
+    delM = pi*1E-6;
     delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
     delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
     deltheta = delLitOmg + delM; % Relative true latitude in rad
@@ -219,16 +254,16 @@ for i = 1
     deltheta = delLitOmg + delM; % Relative true latitude in rad
     delCOE_3 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
     
-    dele2 = 1/(8*a_chief);
-    deli2 = 2/(10*a_chief);
-    delBigOmg = -pi*1E-5;
-    delM = pi*1E-6;
-    delLitOmg = pi*1E-5;
-    deltheta = delLitOmg + delM; % Relative true latitude in rad
     
-    delq1_2 = dele2*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
-    delq2_2 = dele2*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
-    delCOE_4 = [dela, deltheta, deli2, delq1_2, delq2_2, delBigOmg]';
+    dele1 = -1/(8*a_chief);
+    deli1 = -1/(20*a_chief);
+    delLitOmg = -5*pi*1E-7;
+    delBigOmg = pi*1E-6;
+    delM = 0;
+    deltheta = delLitOmg + delM; % Relative true latitude in rad
+    delq1_1 = dele1*cos(BigOmg_chief) - e_chief*sin(BigOmg_chief)*delLitOmg;
+    delq2_1 = dele1*sin(BigOmg_chief) + e_chief*cos(BigOmg_chief)*delLitOmg;
+    delCOE_4 = [dela, deltheta, deli1, delq1_1, delq2_1, delBigOmg]';
     
     % Integrating the deputy initial and final trajectories
     %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
@@ -286,9 +321,14 @@ for j = 1
     H = (F_Aug.')^(-1)*D_Aug*F_Aug^(-1);
     
     % ------------------- state constraint barrier function ------------------
+    Threshold = 0.45;
+    % kb = 1e1; % 1e-7; % barrier function gain
+    % pb = 1; % order of barrier function
+    % delR = rho1(1:3) - rho2(1:3);
+    % B = kb/(norm(delR) - Threshold)^pb;
+    % B = -kb * exp(-norm(delR)^2/Threshold) * delR;
     B = [];
-    b = 0; % no state contraintst
-    B = [B b]; % attach the barrier function to B
+    
     
     % -------------------- Metric and curve Length ----------------------------
     % the metric with state constraint barier functions
@@ -299,8 +339,7 @@ for j = 1
         {'X','dX','k','t','XChief'},...
         {'CurveLength'});
     dLdx = L.jacobian();
-    fdrift = Function('fdrift', {t,Xaug,XChief},...
-        {drift});
+    fdrift = Function('fdrift',{t,Xaug,XChief},{drift});
     
     % Rewrite the functions in c files
     L.generate('L.c',CasADiopts);
@@ -332,9 +371,9 @@ for j = 1
                   conts2*eye(3)  conts3*eye(3)];
         x_bar01 = A_map1*X01;
         x_bar02 = A_map1*X02;
-        X0  = [x_bar01; x_bar02];
-        tspan1 = 2*pi*T_normalized;
-        h      = sqrt(mu_Earth*a_chief*(1-e_chief^2));
+        
+        Ttraj = linspace(0,Period,1e4)/Tc;
+        tspan1 = 2*pi*Ttraj;
         K_f    = 1+e_chief*cos(f2);
         conts1 = mu_Earth*K_f/(h^(3/2));
         conts2 = -mu_Earth*e_chief*sin(f2)/(h^(3/2)); 
@@ -343,8 +382,13 @@ for j = 1
                   conts2*eye(3)  conts3*eye(3)];
         x_bar11 = A_map2*Xf1; 
         x_bar21 = A_map2*Xf2; 
-        Xf = [x_bar11; x_bar21];
         tspan2 = linspace(f2,(f2+2*pi),length(T_normalized));
+        
+        % Initial Conditions
+        X0 = [x_bar01; x_bar02];
+        Xf = [x_bar11; x_bar21];
+        
+        
         tic
         [~, X_rel_0] = ode113(@(t,x)NonDimentionalized_THode(t,x),tspan1,X0,options);
         [~, X_rel_1] = ode113(@(t,x)NonDimentionalized_THode(t,x),tspan2,Xf,options);
@@ -355,7 +399,6 @@ for j = 1
         X_THpos3 = nan(length(X_rel_0),6);
         for i = 1:length(X_rel_0)
             f = tspan1(i);
-            h = sqrt(mu_Earth*a_chief*(1-e_chief^2));
             K_f = 1+e_chief*cos(f);
             conts1 = h^(3/2)/(mu_Earth*K_f);
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
@@ -366,7 +409,6 @@ for j = 1
             X_THpos1(i,:) = (A_inv1*X_rel_0(i,7:12).').';
             
             f = tspan2(i);
-            h = sqrt(mu_Earth*a_chief*(1-e_chief^2));
             K_f = 1+e_chief*cos(f);
             conts1 = h^(3/2)/(mu_Earth*K_f);
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
@@ -378,12 +420,14 @@ for j = 1
         end
         X_THpos01 = [X_THpos0 X_THpos1];
         X_THpos11 = [X_THpos2 X_THpos3];
+        
     
     elseif strcmp(DynamicsModel,'CWode')
          X0 = [X01; X02]/Tc;
          Xf = [Xf1; Xf2]/Tc;
-         [~, X_rel_0] = ode113(@(t,x)NonDimentionalized_CWode(t,x),T_normalized,X0);
-         [~, X_rel_1] = ode113(@(t,x)NonDimentionalized_CWode(t,x),T_normalized,Xf);
+         TT = Ttraj/Tc;
+         [~, X_rel_0] = ode113(@(t,x)NonDimentionalized_CWode(t,x),TT,X0);
+         [~, X_rel_1] = ode113(@(t,x)NonDimentionalized_CWode(t,x),TT,Xf);
          X_THpos01 = Tc*X_rel_0;
          X_THpos11 = Tc*X_rel_1;
              
@@ -396,15 +440,36 @@ for j = 1
         for i = 1:2
             X0integral = [X01,X02];
             Xfintegral = [Xf1,Xf2];
-            [~, X_rel_01] = ode113(@(t,x)NonDimentionalized_NLode(t,x),T_normalized,X0(:,i),options);
-            [~, X_rel_11] = ode113(@(t,x)NonDimentionalized_NLode2(t,x),T_normalized,Xf(:,i),options);
+            TT = Ttraj/Tc;
+            [~, X_rel_01] = ode113(@(t,x)NonDimentionalized_NLode0(t,x),TT,X0(:,i),options);
+            [~, X_rel_11] = ode113(@(t,x)NonDimentionalized_NLodef(t,x),TT,Xf(:,i),options);
             
             X_rel_0   = [X_rel_0, X_rel_01];  X_rel_1 = [X_rel_1, X_rel_11];
             X_THpos01 = [X_THpos01, (Rrho*X_rel_01(:,1:3).').', (Rrho*X_rel_01(:,4:6).').'];
             X_THpos11 = [X_THpos11, (Rrho*X_rel_11(:,1:3).').', (Rrho*X_rel_11(:,4:6).').'];
         end
         toc
-        X0 = X0(:); Xf = Xf(:);
+    end
+    X0 = X0(:); Xf = Xf(:);
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+    for k = 1
+        
+        Position_target2 = X0_Chief2(1:3); Velocity_target2 = X0_Chief2(4:6); 
+        
+        % Converting angles in radians
+        LVLH1 = DCM(Position_target1,Velocity_target1); 
+        N_nudot1 = cross(Position_target1,Velocity_target1)/norm(Position_target1)^2;
+        Position_chaser = Position_target1 + LVLH1\X01(1:3);
+        Velocity_chaser = Velocity_target1 + cross(N_nudot1,(LVLH1\X01(1:3))) + LVLH1\X01(4:6);
+        
+        LVLH2 = DCM(Position_target2,Velocity_target2);
+        N_nudot2 = cross(Position_target2,Velocity_target2)/norm(Position_target2)^2;
+        Position_Desired = Position_target2 + LVLH2\Xf1(1:3);
+        Velocity_Desired = Velocity_target2 + cross(N_nudot2,(LVLH2\Xf1(1:3))) + LVLH2\Xf1(4:6);
+        X0_desired = [Position_Desired;Velocity_Desired]; tspan_inv = flip(tspan);
+        [~, Xdesired] = ode113(@(t,x)M2BodyOde(t,x,mu_Earth),tspan_inv,X0_desired,options);
+        Position_Desired = Xdesired(end,1:3)';
+        Velocity_Desired = Xdesired(end,4:6)';
     end
     
 end
@@ -412,13 +477,14 @@ end
 
 %% --------------------------- AGHF parameters ----------------------------
 for ll = 1
-    smax = 9e9; % Need tpo find an analytic way to solve for this value
+    clc
+    smax = 1e7; % Need tpo find an analytic way to solve for this value
     % # of grids in t
     tgrids = 250;
     % # of grids in s
     sgrids = 250;
     % # of grids of integration for final trajectory extraction
-    intgrids = 1e4;
+    intgrids = 1e5;
     % # of inputs
     M = 3;  N  = length(X0);
     % penalty value (the lambda in paper)
@@ -429,12 +495,12 @@ for ll = 1
     
     % Setting the boundary condtions and the intial condition
     tmax = smax; xpoints = tgrids; xpoints_new = intgrids; tpoints = sgrids;
-    m = 0; t = [0 logspace(-4,log10(tmax),tpoints-1)]; % discretization of s interval in log scale
+    m = 0; t = [0 logspace(-2,log10(tmax),tpoints-1)]; % discretization of s interval in log scale
     
     if strcmp(DynamicsModel,'THode')
-        T    = PNum*wrapTo2Pi(f2)-f1; % motion duration
-        x    = linspace(f1,PNum*wrapTo2Pi(f2),xpoints); % discretization of the curve in time
-        xnew = linspace(f1,PNum*wrapTo2Pi(f2),intgrids);
+        T    = f2-f1; % motion duration
+        x    = linspace(0,T,xpoints); % discretization of the curve in time
+        xnew = linspace(0,T,intgrids);
         
     elseif strcmp(DynamicsModel,'CWode')
         T    = SimTime; % motion duration
@@ -451,10 +517,13 @@ for ll = 1
 end
 % -------------------------------------------------------------------------
 
+
+
 %% ------------------------- Solving the AGHF -----------------------------
 for ll = 1
     % solve for trajectory, see "AGHF" function file for implementation details
     close all
+    clc
     tic;
     disp('solving PDE...');
     
@@ -473,16 +542,20 @@ for ll = 1
     tic;
     disp('Computing the action integral...');
     % calculate the atuated curve length for each grid of s
-    X_temp  = zeros(N,xpoints);
-    dX_temp = zeros(N,xpoints);
-    cost    = zeros(tpoints,1);
+    X_temp   = zeros(N,xpoints);
+    dX_temp  = zeros(N,xpoints);
+    cost     = zeros(tpoints,1);
+    % Int_AGHF = zeros(xpoints,1);
+    % Int_Lyap = zeros(xpoints,1);
+    % cost_AGHF = 0;
+    % cost_Lyap = 0;
     
     n = 6;
     F = eye(n); F_Aug = blkdiag(F,F);
     % penalty matrix (D matrix in the paper)
     D = diag([Penalty*ones(1,n-M) ones(1,M)]); D_Aug = blkdiag(D,D);
     G = (F_Aug.')^(-1)*D_Aug*F_Aug^(-1);
-    
+    G2 = F.'*D*F^(-1);
     for j = 1:tpoints
         for kk = 1:N
             [X_temp(kk,:), dX_temp(kk,:)] = pdeval(m,x,sol(j,:,kk),x);
@@ -498,12 +571,136 @@ for ll = 1
                     f(idx,1) = NonDimentionalized_CWode(x(i),X);
                 elseif strcmp(DynamicsModel,'NLode')
                     f(idx,1) =  NonDimentionalized_NLode(x(i),X);
+                    % fLyap(idx,1) = 1;
                 end
             end
             cost(j) = cost(j) + (dX-f)'*G*(dX-f)*(T/(xpoints-1));
+            % if j == tpoints
+            %     Int_AGHF(i) = (dX-f)'*G*(dX-f)*(T/(xpoints-1));
+            %     cost_AGHF   = cost_AGHF + Int_AGHF(i);
+            %     Int_Lyap(i) = (dXLyap-fLyap)'*G*(dXLyap-fLyap)*(T/(xpoints-1));
+            %     cost_Lyap   = cost_Lyap + Int_Lyap(i);
+            % end
         end
     end
     toc;
+end
+% -------------------------------------------------------------------------
+
+%% ---------------------------- LQR controller ----------------------------
+for j = 1
+    if strcmp(DynamicsModel,'THode')
+        KMat0 = zeros(36,1); R = diag([1e-3,1e-3,1e-3]);
+        Q = diag([1e-3,1e-3,1e-3,1e-5,1e-5,1e-5]);
+        [~, KMat] = ode113(@(t,K)TimeVaiantLQRMatrixODE(t,K,Q,R),xnew,KMat0,options);
+        
+        for i = 1:length(xnew)
+            K(i).Mat = reshape(KMat(i,:),[6,6]);
+        end
+        
+        xLQR = zeros(N,numel(xnew));
+        xLQR(:,1) = X0;  % Initial condition of the problem
+        h = sqrt(mu_Earth*a_chief*(1-e_chief^2));
+        for i = 2:numel(xnew)
+            dt = xnew(i) - xnew(i-1);
+            k1 = dt*TH_LQRode(xnew(i-1),xLQR(:,i-1),K(i).Mat,R);
+            k2 = dt*TH_LQRode(xnew(i-1)+dt/2, xLQR(:,i-1)+k1/2,K(i).Mat,R);
+            k3 = dt*TH_LQRode(xnew(i-1)+dt/2, xLQR(:,i-1)+k2/2,K(i).Mat,R);
+            k4 = dt*TH_LQRode(xnew(i-1)+dt, xLQR(:,i-1)+k3,K(i).Mat,R);
+            xLQR(:,i) = xLQR(:,i-1) + (k1+2*k2+2*k3+k4)/6;
+            for ii = 1:Num_Agent
+                idx = 1+6*(ii-1):6*ii;
+                B = [zeros(3); eye(3)];
+                
+                
+                f      = xnew(i);
+                K_f    = 1+e_chief*cos(f);
+                conts1 = h^(3/2)/(mu_Earth*K_f);
+                conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
+                conts3 = 1/conts1;
+                A_inv  = [conts1*eye(3)       zeros(3);
+                    conts2*eye(3)  conts3*eye(3)];
+                xLQR_Dim(ii).x(:,i) = A_inv*xLQR(idx,i);
+                uu =  A_inv*[zeros(3,1); -R\B'*K(i).Mat*xLQR(idx,i-1)];
+                CrtlLQR(ii).u(:,i) = uu(4:6);
+            end
+        end
+    end
+end
+
+%% -------------------------- Lyapunov Controller -------------------------
+for k = 1
+    % Controller's gains
+    KMat = eye(3)*3E-7;
+    P    = eye(3)*1E-3;
+    
+    Aug_chasser_Xo = [Position_chaser; Velocity_chaser];
+    Aug_target_Xo  = [Position_target1; Velocity_target1];
+    Aug_Desired_Xo = [Position_Desired; Velocity_Desired];
+    Aug_Xo = [Aug_chasser_Xo; Aug_target_Xo; Aug_Desired_Xo];
+    Time  = Tc*xnew;
+    tic
+    [~, Aug_X] = ode113(@(t,Aug_X)ControlUnperturbed2Bodyfunc(t,Aug_X,mu_Earth,KMat,P),Time,Aug_Xo,options);
+    toc
+    
+    for j = 1:length(Time)
+        % Extracting relevant quantities
+        Chasser_r = Aug_X(j,1:3)';   Chasser_v = Aug_X(j,4:6)';
+        Target_r  = Aug_X(j,7:9)';   Target_v  = Aug_X(j,10:12)';
+        Desired_r = Aug_X(j,13:15)'; Desired_v = Aug_X(j,16:18)';
+        
+        % Computing the necessary for trasfrom ECI to LVLH
+        h_vec = cross(Target_r,Target_v); h_norm = norm(h_vec);
+        N_nudot = h_vec/norm(Target_r)^2;
+        TN = DCM(Target_r,Target_v); NOmega_target = cross(Target_r,Target_v)/norm(Target_r)^2;
+        
+        % Computing the globally asymptotically stabilizing controller
+        f_desired = -mu_Earth/norm(Desired_r(1:3))^3 * Desired_r(1:3);
+        f_deputy =  -mu_Earth/norm(Chasser_r(1:3))^3*Chasser_r(1:3);
+        del_r = Chasser_r(1:3) - Desired_r(1:3);
+        del_v = Chasser_v(1:3) - Desired_v(1:3);
+        Control_effort(j,:) = TN*(f_desired - f_deputy - KMat*del_r - P*del_v);
+        
+        % Coverting the deputy ECI coordinates to the LVLH frame
+        NR_rel = Chasser_r - Target_r; NV_rel = Chasser_v - Target_v;
+        TR_rel(j,:) = TN*NR_rel; TV_rel(j,:) = TN*(NV_rel - cross(N_nudot,NR_rel));
+        Xrel(:,j) = [TR_rel(j,:), TV_rel(j,:)]';
+        d_Lyap(:,j) = NonDimentionalized_NLode(xnew(j),Xrel(:,j));
+    end
+    
+    dx_new = diff([Time(3),Time,Time(xpoints_new-2)])/Tc;
+    for i = 1:6
+        % Numerically computing the time derivative of the state
+        dXrel_new    = diff([Xrel(i,3),Xrel(i,:),Xrel(i,xpoints_new-2)]);
+        dXreldx(i,:) = (dXrel_new(1:end-1)./dx_new(1:end-1).*dx_new(2:end) ...
+            + dXrel_new(2:end)./dx_new(2:end).*dx_new(1:end-1)) ...
+            ./ (dx_new(2:end)+dx_new(1:end-1));
+    end
+    
+    
+    Int_Lyapunov(i) = (dXreldx(:,i) - d_Lyap(:,j)).'*G2*(dXreldx(:,i) - d_Lyap(:,j));
+    
+end
+
+
+
+%%
+for ll = 1
+    dist = zeros(xpoints,1);
+    if Num_Agent == 2
+        disp('Computing the distance of closest approach...');
+        for j = 1: length(x)
+            Rho1(1,:) = spline(x,sol(j,:,1),xnew);
+            Rho1(2,:) = spline(x,sol(j,:,2),xnew);
+            Rho1(3,:) = spline(x,sol(j,:,3),xnew);
+            Rho2(1,:) = spline(x,sol(j,:,7),xnew);
+            Rho2(2,:) = spline(x,sol(j,:,8),xnew);
+            Rho2(3,:) = spline(x,sol(j,:,9),xnew);
+            dist(j)   = min(vecnorm(Rho1-Rho2,2,1));
+            Rho1      = [];
+            Rho2      = [];
+        end
+    end
 end
 % -------------------------------------------------------------------------
 
@@ -535,7 +732,7 @@ for ll = 1
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
             conts3 = 1/conts1;
             A_inv  = [conts1*eye(3)       zeros(3);
-                conts2*eye(3)  conts3*eye(3)];
+                      conts2*eye(3)  conts3*eye(3)];
             
             drift = NonDimentionalized_THode(xnew(i),p(:,i));
         elseif strcmp(DynamicsModel,'CWode')
@@ -544,6 +741,11 @@ for ll = 1
             d1 = NonDimentionalized_NLode(xnew(i),p(1:6,i));
             d2 = NonDimentionalized_NLode(xnew(i),p(7:12,i));
             drift = [d1;d2];
+            d_AGHF(:,i) = d1;
+            Int_Geometric(i) = (dpdx(1:6,i) - d_AGHF(:,i)).'*(dpdx(1:6,i) - d_AGHF(:,i));
+            
+            d_Lyap(:,i) = NonDimentionalized_NLode(xnew(i),Xrel(:,i));
+            Int_Lyapunov(i) = (dXreldx(:,i) - d_Lyap(:,i)).'*(dXreldx(:,i) - d_Lyap(:,i));
         end
         % get [Fc F], note: the F_bar matrix in paper
         Ffull = F;
@@ -554,15 +756,37 @@ for ll = 1
             Crtl(jj).u(:,i) = (B.'*B)\(B.') * ( dpdx(idx,i) - drift(idx) );
             if strcmp(DynamicsModel,'THode')
                 Crtl_Aug = A_inv*[zeros(3,1); Crtl(jj).u(:,i)];
-                Dim_Crtl(jj).u(:,i) = Crtl_Aug(4:6);
+                Dim_Crtl(jj).u(:,i) = Crtl(jj).u(:,i);
+                Dim_Crtl2(jj).u(:,i) = Crtl_Aug(4:6);
             elseif strcmp(DynamicsModel,'CWode')
-                Dim_Crtl(jj).u(:,i) = Tc*Crtl(jj).u(:,i);
+                Dim_Crtl(jj).u(:,i) = Crtl(jj).u(:,i);
             elseif strcmp(DynamicsModel,'NLode')
-                Dim_Crtl(jj).u(:,i) = Rrho*Crtl(jj).u(:,i);
+                Dim_Crtl(jj).u(:,i) = (Rrho*Crtl(jj).u(:,i)).*(1/Tc);
             end
         end
     end
 
+    
+    
+close all
+figure
+for i = 1:6
+    subplot(3,2,i)
+    plot(xnew,dXreldx(i,:)-d_Lyap(i,:),'b')
+    hold on
+    % plot(xnew,d_Lyap(i,:),'r--')
+    
+end
+figure
+for i = 1:6
+    subplot(3,2,i)
+    plot(xnew,dpdx(i,:)-d_AGHF(i,:),'b')
+    hold on
+    % plot(xnew,d_AGHF(i,:),'r--')
+    % plot(x,dX_temp(i,:),'g-.')
+    
+end
+    
     if exist('u11','file') == 3
         delete u11.c u11.mexmaci64
     end
@@ -582,12 +806,12 @@ for ll = 1
         delete u23.c u23.mexmaci64
     end
     
-    u11 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(1,:));
-    u12 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(2,:));
-    u13 = casadi.interpolant('U','bspline',{xnew}, Crtl(1).u(3,:));
-    u21 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(1,:));
-    u22 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(2,:));
-    u23 = casadi.interpolant('U','bspline',{xnew}, Crtl(2).u(3,:));
+    u11 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(1).u(1,:));
+    u12 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(1).u(2,:));
+    u13 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(1).u(3,:));
+    u21 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(2).u(1,:));
+    u22 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(2).u(2,:));
+    u23 = casadi.interpolant('U','bspline',{xnew}, Dim_Crtl(2).u(3,:));
     
     u11.generate('u11.c',CasADiopts);
     u12.generate('u12.c',CasADiopts);
@@ -602,8 +826,15 @@ for ll = 1
     mex u22.c -largeArrayDims
     mex u23.c -largeArrayDims
     clear u11 u12 u13 u21 u22 u23
+    
+    % % Computing the total control effort
+    % TotalCtrlLyapunov  = 0;
+    % TotalCtrlGeometric = 0;
+    % for i = 1:3
+    %     TotalCtrlLyapunov  = trapz(xnew,vecnorm(Control_effort,2,2));
+    %     TotalCtrlGeometric = trapz(xnew,vecnorm(Dim_Crtl(1).u,2,1));
+    % end
 end
-
 % -------------------------------------------------------------------------
 
 %% ------------------ Integrate the system's trajectory -------------------
@@ -628,7 +859,7 @@ for ll = 1
             conts2 = mu_Earth*e_chief*sin(f)/h^(3/2);
             conts3 = 1/conts1;
             A_inv  = [conts1*eye(3)       zeros(3);
-                conts2*eye(3)  conts3*eye(3)];
+                      conts2*eye(3)  conts3*eye(3)];
             X_ode45_LVLH(i,:) = (blkdiag(A_inv,A_inv)*X_ode45(i,:).').';
             Pint(:,i)         = blkdiag(A_inv,A_inv)*Pint(:,i);
         end
@@ -646,79 +877,27 @@ end
 %% ------------------------------------------------------------------------
 % ######################## Plotting Results ###############################
 % -------------------------------------------------------------------------
-%% ------------------- Plotting the extracted control ---------------------
+%% --------- Plotting the action integral across each iteratons ----------
+Cost = load('ConstraintsActionIntegral.mat'); cost00 = Cost.cost;
+%%
 for ll = 1
     fh2 = figure;
-    Label  = {'Agent 1', 'Agent 2', 'Agent 3', 'Agent 4'};
-    for i = 1:Num_Agent
-        
-        if strcmp(DynamicsModel,'THode')
-            Time = (Tc/(2*pi))*xnew/3600;
-        else
-            Time = Tc*xnew/3600;
-        end
-        set(gca,'XTick',0:pi/2:2*pi)
-        set(gca,'XTickLabel',{'0','$\pi$/2','$\pi$','3$\pi$/2','2$\pi$'})
-        subplot(2,2,i)
-        plot(Time,Dim_Crtl(i).u(1,:),'r','LineWidth',2.5);
-        hold on
-        plot(Time,Dim_Crtl(i).u(2,:),'b','LineWidth',2.5);
-        plot(Time,Dim_Crtl(i).u(3,:),'g','LineWidth',2.5);
-        ylabel({'Required Control', '(LVLH)'})
-        xlabel('time (hr)')
-        xlim([Time(1) Time(end)])
-        grid on;
-        title(Label(i))
-        
-        
-        subplot(2,2,i+2)
-        plt1 = plot(xnew,Crtl(i).u(1,:),'r','LineWidth',2.5);
-        hold on
-        plt2 = plot(xnew,Crtl(i).u(2,:),'b','LineWidth',2.5);
-        plt3 = plot(xnew,Crtl(i).u(3,:),'g','LineWidth',2.5);
-        ylabel({'Nondimensionalized', 'control'})
-        if strcmp(DynamicsModel,'THode')
-            xlabel('f [rad]')
-        else
-            xlabel('$\tau [-]$')
-        end
-        xlim([xnew(1) xnew(end)])
-        grid on;
-        title(Label(i))
-    end
-    hL = legend([plt1, plt2, plt3],...
-        {'u1','u2','u3'},'AutoUpdate','off');
-    hL.FontSize = 20;
-    newPosition = [0.22 0.14 0.1 0.1];
+    % loglog(t,cost,'LineWidth',3,'Color',c1);
+    plt2 = loglog(t,cost00,'LineWidth',4,'Color',c6);
+    hold on
+    plt1 = loglog(t,cost,'-.','LineWidth',4,'Color',c5);
+    % plt3 = loglog(t,cost05,'LineWidth',3,'Color',c6);
+    % title('Action integral across iteration')
+    xlabel('Homotopy iteration')
+    ylabel('Action Integral')
+    grid on;
+    hL = legend([plt1, plt2],...
+        {'No constraint','Activated constraint'},'AutoUpdate','off');
+    hL.FontSize = 30;
+    newPosition = [0.62 0.75 0.1 0.1];
     newUnits = 'normalized';
     set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1  );
-    
-    % set all units inside figure to normalized so that everything is scaling accordingly
-    set(findall(fh2,'Units','pixels'),'Units','normalized');
-    % do not show figure on screen
-    set(fh2, 'visible', 'on')
-    % set figure units to pixels & adjust figure size
-    fh2.Units = 'pixels';
-    fh2.OuterPosition = [10 10 800 700];
-    % define resolution figure to be saved in dpi
-    res = 500;
-    % recalculate figure size to be saved
-    set(fh2,'PaperPositionMode','manual')
-    fh2.PaperUnits = 'inches';
-    fh2.PaperPosition = [0 0 5580 4320]/res;
-    % save figure
-    % print(fh2,'RequiredControl','-dpng',sprintf('-r%d',res))
-end
-% -------------------------------------------------------------------------
-
-%% --------- Plotting the action integral across each iteratons ----------
-for ll = 1
-    fh2 = figure;
-    loglog(t,cost,'Color',c5,'LineWidth',2.5);
-    title('Action integral across iteration')
-    xlabel('Homotopy iteration')
-    ylabel('Length of the actuated curve')
-    grid on;
+    set(gca,'FontSize',30)
     % set all units inside figure to normalized so that everything is scaling accordingly
     set(findall(fh2,'Units','pixels'),'Units','normalized');
     % do show figure on screen
@@ -733,117 +912,310 @@ for ll = 1
     fh2.PaperUnits = 'inches';
     fh2.PaperPosition = [0 0 5580 4320]/res;
     % save figure
-    % print(fh2,'ActionIntegral','-dpng',sprintf('-r%d',res))
+    % print(fh2,'ActionIntegralCollisionAvoidance','-dpng',sprintf('-r%d',res))
+end
+% -------------------------------------------------------------------------
+%%
+Dist = load('ConstraintsDist.mat'); dist2 = Dist.dist;
+%%
+for ll = 1
+    fh2 = figure;
+    plt2 = loglog(t,dist2,'Color',c6,'LineWidth',4);
+    hold on
+    plt1 = loglog(t,dist,'-.','Color',c5,'LineWidth',4);
+    yl = yline(Threshold,'-.','Minimum allowable distance','LineWidth',3);
+    yl.LabelHorizontalAlignment = 'left';
+    yl.Color = c7;
+    yl.FontSize = 23;
+    yl.FontWeight = 'bold';
+    % title('Action integral across iteration')
+    xlabel('Homotopy iteration')
+    ylabel('Distance of closest approach')
+    grid on
+    ylim([1e-4 1]);
+%     hL = legend([plt1, plt2],...
+%         {'No constraint','Activated constraint'},'AutoUpdate','off');
+%     hL.FontSize = 30;
+%     newPosition = [0.34 0.65 0.1 0.1];
+%     newUnits = 'normalized';
+%     set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1  );
+    set(gca,'FontSize',30)
+    
+    
+    % creating the zoom-in inset
+    ax=axes;
+    set(ax,'units','normalized','position',[.6 .18 .25 .25])
+    box(ax,'on')
+    loglog(t,dist2,'Color',c6,'LineWidth',4,'parent',ax)
+    hold on
+    yl = yline(Threshold,'-.','LineWidth',3,'parent',ax);
+    yl.Color = c7;
+    grid on
+    set(ax,'xlim',[13000,1e7],'ylim',[.4497,0.4502])
+    
+    
+    % set all units inside figure to normalized so that everything is scaling accordingly
+    set(findall(fh2,'Units','pixels'),'Units','normalized');
+    % do show figure on screen
+    set(fh2, 'visible', 'on')
+    % set figure units to pixels & adjust figure size
+    fh2.Units = 'pixels';
+    fh2.OuterPosition = [10 10 700 600];
+    % define resolution figure to be saved in dpi
+    res = 500;
+    % recalculate figure size to be saved
+    set(fh2,'PaperPositionMode','manual')
+    fh2.PaperUnits = 'inches';
+    fh2.PaperPosition = [0 0 5580 4320]/res;
+    % save figure
+    % print(fh2,'DistanceOfClosestApproach','-dpng',sprintf('-r%d',res))
+end
+% -------------------------------------------------------------------------
+%%
+for ll = 1
+    close all
+    fh2 = figure;
+    Label  = {'Agent 1', 'Agent 2', 'Agent 3', 'Agent 4'};
+    for i = 1%:Num_Agent
+        Time  = (Tc/(2*pi))*xnew/3600;
+        plt1 = plot(Time,Int_Geometric,'r','LineWidth',3);
+        hold on
+        plt2 = plot(Time,Int_Lyapunov,'b','LineWidth',3);
+        ylabel('$( \dot{x} - f_d(x) ) G ( \dot{x} - f_d(x))$')
+        xlabel('time (hr)')
+        xlim([Time(1) Time(end)])
+        grid on
+        grid minor
+        title(Label{i})
+        title('Comparison of the final action integrand')
+        set(gca,'FontSize',30)
+        set(gca, 'YScale', 'log')
+    end
+    hL = legend([plt1, plt2],...
+        {'AGHF','Lyapunov'},'AutoUpdate','off');
+    hL.FontSize = 30;
+    newPosition = [0.19 0.15 0.1 0.1];
+    newUnits = 'normalized';
+    set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1  );
+    
+    % set all units inside figure to normalized so that everything is scaling accordingly
+    set(findall(fh2,'Units','pixels'),'Units','normalized');
+    % do not show figure on screen
+    set(fh2, 'visible', 'on')
+    % set figure units to pixels & adjust figure size
+    fh2.Units = 'pixels';
+    fh2.OuterPosition = [10 10 1000 800];
+    % define resolution figure to be saved in dpi
+    res = 500;
+    % recalculate figure size to be saved
+    set(fh2,'PaperPositionMode','manual')
+    fh2.PaperUnits = 'inches';
+    fh2.PaperPosition = [0 0 6080 5020]/res;
+    % save figure
+    % print(fh2,'FinalActionIntegralComparison','-dpng',sprintf('-r%d',res))
+end
+
+%% ------------------- Plotting the extracted control ---------------------
+for ll = 1
+    close all
+    fh2 = figure;
+    Label  = {'Agent 1', 'Agent 2', 'Agent 3', 'Agent 4'};
+    for i = 1%:Num_Agent
+        
+        if strcmp(DynamicsModel,'THode')
+            Time  = (Tc/(2*pi))*xnew/3600;
+            time1 = tspan/3600;
+        else
+            Time  = Tc*xnew/3600;
+            time1 = tspan/3600;
+        end
+        % set(gca,'XTick',0:pi/2:2*pi)
+        % set(gca,'XTickLabel',{'0','$\pi$/2','$\pi$','3$\pi$/2','2$\pi$'})
+        subplot(2,1,1)
+        plot(Time,Dim_Crtl(i).u(1,:),'r','LineWidth',3);
+        hold on
+        plot(Time,Dim_Crtl(i).u(2,:),'b','LineWidth',3);
+        plot(Time,Dim_Crtl(i).u(3,:),'g','LineWidth',3);
+        ylabel({'u [km/s$^{2}$]'})
+        % xlabel('time (hr)')
+        xlim([Time(1) Time(end)])
+        grid on
+        % grid minor
+        % title(Label{i})
+        title('Geometric Control')
+        set(gca,'FontSize',30)
+        
+        subplot(2,1,2)
+        plt1 = plot(Time,Control_effort(:,1)','r','LineWidth',3);
+        hold on
+        plt2 = plot(Time,Control_effort(:,2)','b','LineWidth',3);
+        plt3 = plot(Time,Control_effort(:,3)','g','LineWidth',3);
+        ylabel('u [km/s$^{2}$]')
+        xlabel('time [hr]')
+        xlim([Time(1) Time(end)])
+        grid on
+        title('Lyapunov Control')
+        set(gca,'FontSize',30)
+        
+        % subplot(3,1,3)
+        % plot(Time,CrtlLQR(i).u(1,:),'r','LineWidth',3);
+        % hold on
+        % plot(Time,CrtlLQR(i).u(2,:),'b','LineWidth',3);
+        % plot(Time,CrtlLQR(i).u(3,:),'g','LineWidth',3);
+        % ylabel('u [km/s$^{2}$]')
+        % xlabel('time (hr)')
+        % xlim([Time(1) Time(end)])
+        % grid on
+        % % grid minor
+        % title('LQR Control')
+        % subplot(2,2,i+2)
+        % plt1 = plot(xnew,Crtl(i).u(1,:),'r','LineWidth',2.5);
+        % hold on
+        % plt2 = plot(xnew,Crtl(i).u(2,:),'b','LineWidth',2.5);
+        % plt3 = plot(xnew,Crtl(i).u(3,:),'g','LineWidth',2.5);
+        % ylabel({'Nondimensionalized', 'control'})
+        % if strcmp(DynamicsModel,'THode')
+        %     xlabel('f [rad]')
+        % else
+        %     xlabel('$\tau [-]$')
+        % end
+        % xlim([xnew(1) xnew(end)])
+        % grid on;
+        % title(Label(i))
+        set(gca,'FontSize',30)
+    end
+    hL = legend([plt1, plt2, plt3],...
+        {'u1','u2','u3'},'AutoUpdate','off');
+    hL.FontSize = 30;
+    newPosition = [0.19 0.15 0.1 0.1];
+    newUnits = 'normalized';
+    set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1  );
+    
+    % set all units inside figure to normalized so that everything is scaling accordingly
+    set(findall(fh2,'Units','pixels'),'Units','normalized');
+    % do not show figure on screen
+    set(fh2, 'visible', 'on')
+    % set figure units to pixels & adjust figure size
+    fh2.Units = 'pixels';
+    fh2.OuterPosition = [10 10 1000 800];
+    % define resolution figure to be saved in dpi
+    res = 500;
+    % recalculate figure size to be saved
+    set(fh2,'PaperPositionMode','manual')
+    fh2.PaperUnits = 'inches';
+    fh2.PaperPosition = [0 0 6080 5020]/res;
+    % save figure
+    % print(fh2,'RequiredControl_AGHFvsLyapunov','-dpng',sprintf('-r%d',res))
 end
 % -------------------------------------------------------------------------
 
 %% ---- 3D plot of the converged solution (Nondimensionalized units) ------
 for ll = 1
-    cMat1 = [c5;c6];
-    cMat2 = [c3;c1];
-    cMat0 = [c7;c4];
-    
-    fh2 = figure;
-    hold on
-    plt0  = zeros(Num_Agent);
-    plt1   = zeros(Num_Agent);
-    plt2  = zeros(Num_Agent);
-    for jj = 1:Num_Agent
-        idx = 1+mm*(jj-1):mm*jj;
-        
-        plt0(:,jj) = plot3(X_ode45(:,idx(1)),X_ode45(:,idx(2)),X_ode45(:,idx(3)),...
-            '--','Color',cMat0(jj,:),'LineWidth',2.5);
-        
-        plt1(:,jj) = plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
-            'LineWidth',3,...
-            'MarkerEdgeColor',cMat1(jj,:),...
-            'MarkerFaceColor',cMat1(jj,:)',...
-            'MarkerSize',8);
-        
-        
-        plt2(:,jj) = plot3(X_rel_1(1,idx(1)),X_rel_1(1,idx(2)),X_rel_1(1,idx(3)),'o',...
-            'LineWidth',3,...
-            'MarkerEdgeColor',cMat2(jj,:),...
-            'MarkerFaceColor',cMat2(jj,:),...
-            'MarkerSize',8);
-        
-        h5 = plot3(0,0,0,'bo',...
-            'LineWidth',2,...
-            'MarkerEdgeColor','k',...
-            'MarkerFaceColor','k',...
-            'MarkerSize',15);
-        plot3(X_rel_0(:,idx(1)),X_rel_0(:,idx(2)),X_rel_0(:,idx(3)),'Color',cMat1(jj,:),'DisplayName','Initial Traj');
-        plot3(X_rel_1(:,idx(1)),X_rel_1(:,idx(2)),X_rel_1(:,idx(3)),'Color',cMat2(jj,:));
-        
-        grid on
-        xlabel('$\bar{x}$')
-        ylabel('$\bar{y}$')
-        zlabel('$\bar{z}$')
-        title('{\color{black} 3D Relative Trajectory (Nondimensionalized units)}','interpreter','tex')
-    end
-    % r = 1;
-    % [x_sphere, y_sphere, z_sphere] = sphere(100);
-    % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
-    % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
-    % axis equal
-    
-    view(68,10)
-    hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
-        {'Chief Location','Agent1 Init Condition','Agent2 Init Condition',...
-        'Agent1 End Condition','Agent2 End Condition','Agent1 Transfer Traj',...
-        'Agent2 Transfer Traj'},'AutoUpdate','off');
-    % Programatically move the Legend
-    newPosition = [0.21 0.72 0.1 0.1];
-    newUnits = 'normalized';
-    set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
-    
-    % set all units inside figure to normalized so that everything is scaling accordingly
-    set(findall(fh2,'Units','pixels'),'Units','normalized');
-    % do show figure on screen
-    set(fh2, 'visible', 'on')
-    % set figure units to pixels & adjust figure size
-    fh2.Units = 'pixels';
-    fh2.OuterPosition = [10 10 900 800];
-    % define resolution figure to be saved in dpi
-    res = 500;
-    % recalculate figure size to be saved
-    set(fh2,'PaperPositionMode','manual')
-    fh2.PaperUnits = 'inches';
-    fh2.PaperPosition = [0 0 5580 4320]/res;
-    % save figure
-    % print(fh2,'NondimensionalizedConvergeSolution','-dpng',sprintf('-r%d',res))
-    
+    % cMat1 = [c5;c6];
+    % cMat2 = [c3;c1];
+    % cMat0 = [c7;c4];
+    %
+    % fh2 = figure;
+    % hold on
+    % plt0  = zeros(Num_Agent);
+    % plt1   = zeros(Num_Agent);
+    % plt2  = zeros(Num_Agent);
+    % for jj = 1:Num_Agent
+    %     idx = 1+mm*(jj-1):mm*jj;
+    %
+    %     plt0(:,jj) = plot3(X_ode45(:,idx(1)),X_ode45(:,idx(2)),X_ode45(:,idx(3)),...
+    %         '--','Color',cMat0(jj,:),'LineWidth',2.5);
+    %
+    %     plt1(:,jj) = plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
+    %         'LineWidth',3,...
+    %         'MarkerEdgeColor',cMat1(jj,:),...
+    %         'MarkerFaceColor',cMat1(jj,:)',...
+    %         'MarkerSize',8);
+    %
+    %
+    %     plt2(:,jj) = plot3(X_rel_1(1,idx(1)),X_rel_1(1,idx(2)),X_rel_1(1,idx(3)),'o',...
+    %         'LineWidth',3,...
+    %         'MarkerEdgeColor',cMat2(jj,:),...
+    %         'MarkerFaceColor',cMat2(jj,:),...
+    %         'MarkerSize',8);
+    %
+    %     h5 = plot3(0,0,0,'bo',...
+    %         'LineWidth',2,...
+    %         'MarkerEdgeColor','k',...
+    %         'MarkerFaceColor','k',...
+    %         'MarkerSize',15);
+    %     plot3(X_rel_0(:,idx(1)),X_rel_0(:,idx(2)),X_rel_0(:,idx(3)),'Color',cMat1(jj,:),'DisplayName','Initial Traj');
+    %     plot3(X_rel_1(:,idx(1)),X_rel_1(:,idx(2)),X_rel_1(:,idx(3)),'Color',cMat2(jj,:));
+    %
+    %     grid on
+    %     xlabel('$\bar{x}$')
+    %     ylabel('$\bar{y}$')
+    %     zlabel('$\bar{z}$')
+    %     title('{\color{black} 3D Relative Trajectory (Nondimensionalized units)}','interpreter','tex')
+    % end
+    % % r = 1;
+    % % [x_sphere, y_sphere, z_sphere] = sphere(100);
+    % % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
+    % % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
+    % % axis equal
+    % plot3(NonDimR_rel(:,1),NonDimR_rel(:,2),NonDimR_rel(:,3),'r','LineWidth',3);
+    % view(68,10)
+    % hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
+    %     {'Chief Location','Agent1 Init Condition','Agent2 Init Condition',...
+    %     'Agent1 End Condition','Agent2 End Condition','Agent1 Transfer Traj',...
+    %     'Agent2 Transfer Traj'},'AutoUpdate','off');
+    % % Programatically move the Legend
+    % newPosition = [0.21 0.72 0.1 0.1];
+    % newUnits = 'normalized';
+    % set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
+    %
+    % % set all units inside figure to normalized so that everything is scaling accordingly
+    % set(findall(fh2,'Units','pixels'),'Units','normalized');
+    % % do show figure on screen
+    % set(fh2, 'visible', 'on')
+    % % set figure units to pixels & adjust figure size
+    % fh2.Units = 'pixels';
+    % fh2.OuterPosition = [10 10 900 800];
+    % % define resolution figure to be saved in dpi
+    % res = 500;
+    % % recalculate figure size to be saved
+    % set(fh2,'PaperPositionMode','manual')
+    % fh2.PaperUnits = 'inches';
+    % fh2.PaperPosition = [0 0 5580 4320]/res;
+    % % save figure
+    % % print(fh2,'NondimensionalizedConvergeSolution','-dpng',sprintf('-r%d',res))
 end
 % -------------------------------------------------------------------------
 
 %% --- 3D plot of the converged solution (in the configuration space) -----
 for ll = 1
-    
+    Num_Agent = 1;
     cMat1 = [c5;c6];
     cMat2 = [c3;c1];
-    cMat0 = [c7;c4];
+    cMat0 = [c4;c7];
     fh2 = figure;
+    view(68,10)
     hold on
-    plt0  = zeros(Num_Agent);
-    plt1   = zeros(Num_Agent);
-    plt2  = zeros(Num_Agent);
+    plt0 = zeros(Num_Agent);
+    plt1 = zeros(Num_Agent);
+    plt2 = zeros(Num_Agent);
     
     for jj = 1:Num_Agent
         idx = 1+mm*(jj-1):mm*jj;
         plt0(:,jj) = plot3(X_ode45_LVLH(:,idx(1)),X_ode45_LVLH(:,idx(2)),X_ode45_LVLH(:,idx(3)),...
-            '-.','Color',cMat0(jj,:),'LineWidth',2.5);
+            'Color',cMat0(jj,:),'LineWidth',3);
         
         plt1(:,jj) = plot3(X_THpos01(1,idx(1)),X_THpos01(1,idx(2)),X_THpos01(1,idx(3)),'*',...
             'LineWidth',3,...
             'MarkerEdgeColor',cMat1(jj,:),...
             'MarkerFaceColor',cMat1(jj,:)',...
-            'MarkerSize',8);
+            'MarkerSize',12);
         
         plt2(:,jj) = plot3(X_THpos11(1,idx(1)),X_THpos11(1,idx(2)),X_THpos11(1,idx(3)),'o',...
             'LineWidth',3,...
             'MarkerEdgeColor',cMat2(jj,:),...
             'MarkerFaceColor',cMat2(jj,:),...
-            'MarkerSize',8);
+            'MarkerSize',12);
         
         h5 = plot3(0,0,0,'bo',...
             'LineWidth',2,...
@@ -851,27 +1223,38 @@ for ll = 1
             'MarkerFaceColor','k',...
             'MarkerSize',15);
         
-        plot3(X_THpos11(:,idx(1)),X_THpos11(:,idx(2)),X_THpos11(:,idx(3)),'Color',cMat2(jj,:));
-        plot3(X_THpos01(:,idx(1)),X_THpos01(:,idx(2)),X_THpos01(:,idx(3)),'Color',cMat1(jj,:));
+        plot3(X_THpos11(:,idx(1)),X_THpos11(:,idx(2)),X_THpos11(:,idx(3)),'--','Color',cMat2(jj,:),'LineWidth',3);
+        plot3(X_THpos01(:,idx(1)),X_THpos01(:,idx(2)),X_THpos01(:,idx(3)),'--','Color',cMat1(jj,:),'LineWidth',3);
         
         grid on
+        % grid minor
         xlabel('X [km]')
         ylabel('Y [km]')
         zlabel('Z [km]')
-        title('{\color{black} 3D Relative Trajectory}','interpreter','tex')
+        title('{\color{black} e = 0.5}','interpreter','tex')
     end
     
+    h1 = plot3(TR_rel(:,1),TR_rel(:,2),TR_rel(:,3),'r','LineWidth',3);
+    % h2 = plot3(xLQR_Dim(1).x(1,:),xLQR_Dim(1).x(2,:),xLQR_Dim(1).x(3,:),'k','LineWidth',3);
     
-    view(68,10)
-    hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
-        {'Chief Location','Agent1 Init Condition','Agent2 Init Condition',...
-        'Agent1 End Condition','Agent2 End Condition','Agent1 Transfer Traj',...
-        'Agent2 Transfer Traj'},'AutoUpdate','off');
+    if Num_Agent == 2
+        hL = legend([h5, plt1(end,1), plt1(end,2), plt2(end,1), plt2(end,2), plt0(end,1), plt0(end,2)],...
+            {'Chief Location','Agent1 Init Condition','Agent2 Init Condition',...
+            'Agent1 End Condition','Agent2 End Condition','Agent1 Transfer Traj',...
+            'Agent2 Transfer Traj'},'AutoUpdate','off');
+    else
+        hL = legend([h5, plt1(end,1), plt2(end,1), plt0(end,1),h1],...
+            {'Chief Location','Deputy Init Condition',...
+            'Deputy End Condition','Geometric Ctrl Traj',...
+            'Lyapunov Crtl Traj'},...
+            'AutoUpdate','off');
+    end
     % Programatically move the Legend
-    newPosition = [0.22 0.72 0.1 0.1]; %[0.21 0.72 0.1 0.1];
+    newPosition = [0.25 0.25 0.1 0.1]; %[0.21 0.72 0.1 0.1];
     newUnits = 'normalized';
     set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
     
+    set(gca,'FontSize',30)
     % r = 1;
     % [x_sphere, y_sphere, z_sphere] = sphere(100);
     % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
@@ -885,15 +1268,15 @@ for ll = 1
     set(fh2, 'visible', 'on')
     % set figure units to pixels & adjust figure size
     fh2.Units = 'pixels';
-    fh2.OuterPosition = [10 10 900 800];
+    fh2.OuterPosition = [10 10 1400 1000];
     % define resolution figure to be saved in dpi
     res = 500;
     % recalculate figure size to be saved
     set(fh2,'PaperPositionMode','manual')
     fh2.PaperUnits = 'inches';
-    fh2.PaperPosition = [0 0 5580 4320]/res;
+    fh2.PaperPosition = [0 0 8580 6320]/res;
     % save figure
-    % print(fh2,'ConvergeSolution','-dpng',sprintf('-r%d',res))
+    % print(fh2,'ConvergeSolution_AGHFvsLyapunov','-dpng',sprintf('-r%d',res))
     
 end
 % -------------------------------------------------------------------------
@@ -901,29 +1284,30 @@ end
 %% ------ Animation of the homotopy trasformation during convergence ------
 for k = 1
     
-    cMat1  = [c5;c6];
+    cMat1 = [c5;c6];
     cMat2 = [c3;c1];
-    cMat0 = [c7;c4];
+    cMat0 = [c11;c4];
     
-    fh2 = figure;
+    fh2 = figure('Renderer', 'painters', 'Position', [10 10 1400 1000]);
+    view(68,10)
     hold on
     plt0  = zeros(Num_Agent);
-    plt1   = zeros(Num_Agent);
+    plt1  = zeros(Num_Agent);
     plt2  = zeros(Num_Agent);
-    for jj = 1:Num_Agent
+    for jj = 1% :Num_Agent
         idx = 1+mm*(jj-1):mm*jj;
         
         plt0(:,jj) = plot3(X_ode45(:,idx(1)),X_ode45(:,idx(2)),X_ode45(:,idx(3)),...
-            '--','Color',cMat0(jj,:),'LineWidth',2.5);
+            'Color',cMat0(jj,:),'LineWidth',2.5);
         
-        plt1(:,jj) = plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
+        plot3(X_rel_0(1,idx(1)),X_rel_0(1,idx(2)),X_rel_0(1,idx(3)),'*',...
             'LineWidth',3,...
             'MarkerEdgeColor',cMat1(jj,:),...
             'MarkerFaceColor',cMat1(jj,:)',...
             'MarkerSize',8);
         
         
-        plt2(:,jj) = plot3(X_rel_1(1,idx(1)),X_rel_1(1,idx(2)),X_rel_1(1,idx(3)),'o',...
+        plot3(X_rel_1(1,idx(1)),X_rel_1(1,idx(2)),X_rel_1(1,idx(3)),'o',...
             'LineWidth',3,...
             'MarkerEdgeColor',cMat2(jj,:),...
             'MarkerFaceColor',cMat2(jj,:),...
@@ -934,14 +1318,11 @@ for k = 1
             'MarkerEdgeColor','k',...
             'MarkerFaceColor','k',...
             'MarkerSize',15);
-        plot3(X_rel_0(:,idx(1)),X_rel_0(:,idx(2)),X_rel_0(:,idx(3)),'Color',cMat1(jj,:),'DisplayName','Initial Traj');
-        plot3(X_rel_1(:,idx(1)),X_rel_1(:,idx(2)),X_rel_1(:,idx(3)),'Color',cMat2(jj,:));
+        plt1(:,jj) = plot3(X_rel_0(:,idx(1)),X_rel_0(:,idx(2)),X_rel_0(:,idx(3)),'Color',cMat1(jj,:),'DisplayName','Initial Traj');
+        plt2(:,jj) = plot3(X_rel_1(:,idx(1)),X_rel_1(:,idx(2)),X_rel_1(:,idx(3)),'Color',cMat2(jj,:));
         
         grid on
-        xlabel('$\bar{x}$')
-        ylabel('$\bar{y}$')
-        zlabel('$\bar{z}$')
-        title('{\color{black} 3D Relative Trajectory (Nondimensionalized units)}','interpreter','tex')
+        grid minor
     end
     
     % r = 1;
@@ -960,27 +1341,34 @@ for k = 1
     Agent1_u2 = interp2(t,x,sol(:,:,2),X,Y);
     Agent1_u3 = interp2(t,x,sol(:,:,3),X,Y);
     
-    Xrel = Rrho*[Agent1_u1(1,:);Agent1_u2(1,:);Agent1_u3(1,:)];
-    X = Xrel(1,:);
-    Y = Xrel(2,:);
-    Z = Xrel(3,:);
+    Xrel2 = Rrho*[Agent1_u1(1,:);Agent1_u2(1,:);Agent1_u3(1,:)];
+    X = Xrel2(1,:);
+    Y = Xrel2(2,:);
+    Z = Xrel2(3,:);
     h2 = plot3(X,Y,Z,'Color',c9,'LineWidth',2);
     hold on
     h1 = plot3(X,Y,Z,'r','LineWidth',2);
     grid on;
-    title('Nonlinear Geomeric Planning - 3D configuration');
-    xlabel('$x$');
-    ylabel('$y$');
-    zlabel('$z$');
-    hL = legend([plt0(end,1), h5, h2, h1],...
-        {'Agent1','Chief','Initial Guess','Homotopy Iteration'},'AutoUpdate','off');
-    hL.FontSize = 27;
-    newPosition = [.25 .75 0.01 0.01];
+    % title('Nonlinear Geomeric Planning - 3D configuration');
+    xlabel('$x$[km]');
+    ylabel('$y$[km]');
+    zlabel('$z$[km]');
+    hL = legend([h5, plt1(end,1), plt2(end,1), plt0(end,1),h2, h1],...
+            {'Chief Location','Deputy Init Condition',...
+            'Deputy End Condition','Deputy Transfer Traj',...
+            'Initial Guess','Homotopy Iteration'},...
+            'AutoUpdate','off');
+    newPosition = [0.25 0.25 0.1 0.1]; %[0.21 0.72 0.1 0.1];
     newUnits = 'normalized';
     set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
-    set(gca,'nextplot','replacechildren','visible','off')
-    f  = getframe;
-    [im,map] = rgb2ind(f.cdata,1000,'nodither'); % 65536
+    set(gca,'FontSize',30)
+    
+    
+    set(gca,'nextplot','replacechildren','visible','on')
+    
+    
+    f  = getframe(fh2);
+    [im,map] = rgb2ind(f.cdata,256,'nodither'); % 65536
     im(1,1,1,tpointsCorase) = 0;
     for i = 1:tpointsCorase
         Xrel = Rrho*[Agent1_u1(i,:);Agent1_u2(i,:);Agent1_u3(i,:)];
@@ -990,30 +1378,32 @@ for k = 1
         refreshdata(h1,'caller');
         drawnow;
         view(68,10)
-        if i == 1
-            % set all units inside figure to normalized so that everything is scaling accordingly
-            set(findall(fh2,'Units','pixels'),'Units','normalized');
-            % do show figure on screen
-            set(fh2, 'visible', 'on')
-            % set figure units to pixels & adjust figure size
-            fh2.Units = 'pixels';
-            fh2.OuterPosition = [10 10 900 800];
-            % define resolution figure to be saved in dpi
-            res = 500;
-            % recalculate figure size to be saved
-            set(fh2,'PaperPositionMode','manual')
-            fh2.PaperUnits = 'inches';
-            fh2.PaperPosition = [0 0 5580 4320]/res;
-            % save figure
-            print(fh2,'Convergence0','-dpng',sprintf('-r%d',res))
-        end
+        
+        % if i == 150
+        %     % set all units inside figure to normalized so that everything is scaling accordingly
+        %     set(findall(fh2,'Units','pixels'),'Units','normalized');
+        %     % do show figure on screen
+        %     set(fh2, 'visible', 'on')
+        %     % set figure units to pixels & adjust figure size
+        %     fh2.Units = 'pixels';
+        %     fh2.OuterPosition = [10 10 900 800];
+        %     % define resolution figure to be saved in dpi
+        %     res = 500;
+        %     % recalculate figure size to be saved
+        %     set(fh2,'PaperPositionMode','manual')
+        %     fh2.PaperUnits = 'inches';
+        %     fh2.PaperPosition = [0 0 5580 4320]/res;
+        %     % save figure
+        %     print(fh2,'ConvergenceHomotopy4','-dpng',sprintf('-r%d',res))
+        %     aa = 1;
+        % end
         
         
         
-        % f = getframe;
-        % im(:,:,1,i) = rgb2ind(f.cdata,map,'nodither');
+        f = getframe(fh2);
+        im(:,:,1,i) = rgb2ind(f.cdata,map,'nodither');
     end
-    % imwrite(im,map,'AGHF_THode.gif','DelayTime',0,'LoopCount',inf) %g443800
+    imwrite(im,map,'AGHF.gif','DelayTime',0.,'LoopCount',inf) %g443800
     
 end
 % -------------------------------------------------------------------------
@@ -1026,24 +1416,12 @@ function [c,f,s] = mypdexpde(x,t,u,DuDx,k,N) % Define PDE; right-hand-side of AG
 
 XChief = full([Chief_x(x);  Chief_y(x);  Chief_z(x);...
                Chief_dx(x); Chief_dy(x); Chief_dz(x)]);
-LL = full(L(u,DuDx,k,x));
+LL = full(L(u,DuDx,k,x,XChief));
 CasADiresult = full(dLdx(u,DuDx,k,x,XChief,LL))';
 CasADir = [CasADiresult(1:12), CasADiresult(13:24)];
 
-
-% global get_EL
-% EL = get_EL(u,DuDx,k,x);
-% state  = dlarray(u);
-% dstate = dlarray(DuDx);
-% [pLx2,pLxd2] = dlfeval(@AutoDiff_Dynamics,state,dstate,k,x);
-% test1 = CasADir - [pLx2,pLxd2]
-% test2 = CasADir - EL % [pLx2,pLxd2]
-
-
-
-
 % dL/dx
-pLx = CasADir(:,1); % EL(:,1); %
+pLx  = CasADir(:,1); % EL(:,1); %
 % dL/d(dot_x)
 pLxd = CasADir(:,2); % EL(:,2); % 
 
@@ -1059,8 +1437,12 @@ function u0 = mypdexic(x, X0, Xf, T)    % Initial condition for AGHF
 %%  straight line connecting X0 and Xf
 % u0=X0+(Xf-X0)*(x/T);
 % % add some sinusoidal deviation to x1 initial guess (can be discarded)
-% u0(1)=X0(1)+(Xf(1)-X0(1))*(x/T) + 0.01*sin(2*pi*x/T);
-
+% u0(1,:)=X0(1)+(Xf(1)-X0(1))*(x/T) + 0.01*sin(2*pi*x/T);
+% u0(7,:)=X0(7)+(Xf(7)-X0(7))*(x/T) + 0.01*sin(2*pi*x/T);
+% u0(1:6,:)=X0(1:6)+(Xf(1:6)-X0(1:6))*(x/T);
+% % add some sinusoidal deviation to x1 initial guess (can be discarded)
+% u0(1,:)=X0(1)+(Xf(1)-X0(1))*(x/T) + 0.01*sin(2*pi*x/T);
+% 
 %% Sinusoidal initial condition
 freq1 = pi/2 + 2*pi;
 freq2 = pi + 2*pi;
@@ -1123,11 +1505,47 @@ Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
 Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc;
 
 end
-function [Xdot] = NonDimentionalized_NLode2(t,X)
+function [Xdot] = NonDimentionalized_NLode0(t,X)
 global mu_Earth Rrho Tc 
 format long
-X_chief = full([Chief_x1(t);  Chief_y1(t);  Chief_z1(t);...
-                Chief_dx1(t); Chief_dy1(t); Chief_dz1(t)]);
+X_chief = full([Chief_x0(t);  Chief_y0(t);  Chief_z0(t);...
+                Chief_dx0(t); Chief_dy0(t); Chief_dz0(t)]);
+tilde = @(v) [0    -v(3)  v(2);
+    v(3)   0   -v(1);
+    -v(2)  v(1)    0];
+
+% Collecting relevant quantities
+rt = X_chief(1:3);  vt = X_chief(4:6); rt_norm = (rt.'*rt).^(1/2);
+rho_bar = X(1:3,:); drho_bar = X(4:6,:);
+
+% Redimensionalizing the variables in the ODE
+rho = Rrho*rho_bar; rho_prime = Rrho*drho_bar;
+rc  = [rt_norm; 0; 0] + rho; rc_norm =  (rc.'*rc).^(1/2);
+
+% Calculating the respective accelerations
+TN = DCM(rt,vt); % DCM's between target's RIC frame and ECI frame
+
+% Computing the angular velocity and angular acceleration of the target frame
+h_vec = tilde(rt)*vt;
+Omega = TN*( h_vec/rt_norm^2);
+Omegadot = TN*( -2*(rt.'*vt)*h_vec/rt_norm^4 );
+
+% relative gravitationall acceleration and coriolis effects
+del_ag =  -mu_Earth/rc_norm^3*rc + mu_Earth/rt_norm^2*[1 0 0]'; % (2-body) gravitatinal
+Coriolis_Effect = - 2*tilde(Omega)*rho_prime ...
+    - tilde(Omega)*(tilde(Omega)*rho) ...
+    - tilde(Omegadot)*rho;
+
+% Nondimetional relative ODE of the deputy
+Xdot = [drho_bar; (del_ag + Coriolis_Effect)];
+Xdot = (blkdiag(Rrho,Rrho)\Xdot)*Tc;
+
+end
+function [Xdot] = NonDimentionalized_NLodef(t,X)
+global mu_Earth Rrho Tc 
+format long
+X_chief = full([Chief_xf(t);  Chief_yf(t);  Chief_zf(t);...
+                Chief_dxf(t); Chief_dyf(t); Chief_dzf(t)]);
 tilde = @(v) [0    -v(3)  v(2);
     v(3)   0   -v(1);
     -v(2)  v(1)    0];
@@ -1166,9 +1584,9 @@ global mu_dot Tc
 
 % Computing the CW control and dynamic matrices
 A  = [zeros(3) eye(3);
-    3*mu_dot^2 0 0 0 2*mu_dot 0;
-    0 0 0 -2*mu_dot 0 0;
-    0 0 -mu_dot^2 0 0 0]*Tc;
+      3*mu_dot^2 0 0 0 2*mu_dot 0;
+      0 0 0 -2*mu_dot 0 0;
+      0 0 -mu_dot^2 0 0 0]*Tc;
 
 % Reshaping the input into an 6 by n matrix
 [l,~] = size(X);
@@ -1191,6 +1609,39 @@ Xdot = A*X;
 Xdot = Xdot(:);
 end
 % -------------------------------------------------------------------------
+function [KMatdot] = TimeVaiantLQRMatrixODE(t,KMat,Q,R)
+global e_chief
+k = 1+e_chief*cos(t);
+A = [zeros(3) eye(3);
+    3/k  0  0   0   2  0;
+    0    0  0   -2  0  0;
+    0    0  -1  0   0  0];
+B = [zeros(3); eye(3)];
+KMat = reshape(KMat,[6,6]);
+
+KMatdot = -KMat*A + KMat*B/R*B'*KMat - Q - A'*KMat;
+KMatdot = KMatdot(:);
+
+end
+% -------------------------------------------------------------------------
+function [xdot] = TH_LQRode(t,x,K,R)
+format long
+global e_chief
+k = 1+e_chief*cos(t);
+A = [zeros(3)      eye(3);
+     3/k  0  0   0   2  0;
+     0    0  0   -2  0  0;
+     0    0  -1  0   0  0];
+B = [zeros(3); eye(3)];
+
+U1 = -R\B'*K*x(1:6);
+U2 = -R\B'*K*x(7:12);
+u = [U1 U2]; 
+[l,~] = size(x);
+x = reshape(x,6,l/6);
+xdot = A*x + B*u;
+xdot = xdot(:);
+end
 
 %!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %!!!!!!!!!!!!!!!!!!!!!!!!!   CasADi Functions   !!!!!!!!!!!!!!!!!!!!!!!!!

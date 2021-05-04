@@ -18,19 +18,19 @@ format long
 global JD
 
 Cr   = Spacecraft.Cr;
-area = Spacecraft.L*Spacecraft.l;
+area = (2*pi*Spacecraft.r^2); % Area of the plate (in m^2)
 mass = Spacecraft.M+Spacecraft.m;
 
-Pcrp = 1357/(299792458); % Solar pressure
-AU = 149597870.7; % Distance between Earth and Sun (in Km)
+Pcrp  = 1357/(299792458); % Solar pressure
+AU    = 149597870.7; % Distance between Earth and Sun (in Km)
 gamma = (Cr*area)/mass;
-beta = -Pcrp * AU^2 * gamma /1000;
+beta  = Pcrp * AU^2 * gamma* 1e-3; % in km/s^2
 
 JulianDay = JD+t/86400;
-[XS, Vs, ~] = Ephem(JulianDay,3,'EME2000');
-Vs = -Vs;
-XS = -XS;
-Xrel = XS - X(1:3,:);
+[XS, Vs, ~] = Ephem(JulianDay,3,'EME2000'); % Earth position and velocity measured from the Sun
+Vs = -Vs; % Measured from the ECI frame
+XS = -XS; % Measured from the ECI frame
+Xrel = XS - X(1:3); % Pointing from the sun to the cannonball
 
 acc =  beta * Xrel/ norm(Xrel)^3;
 
