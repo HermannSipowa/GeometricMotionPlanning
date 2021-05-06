@@ -12,7 +12,7 @@ clc
 % str2 = getenv('USER');
 % str3 = '/Desktop/casadi-osx-matlabR2015a-v3.5.5';
 % addpath(append(str1,str2,str3))
-addpath('../casadi-osx-matlabR2015a-v3.5.5')
+% addpath('../casadi-osx-matlabR2015a-v3.5.5')
 import casadi.*
 global mu_Earth Target Chasser M ...
     Tc Num_Agent ae JD AU % iteration InitalCondition
