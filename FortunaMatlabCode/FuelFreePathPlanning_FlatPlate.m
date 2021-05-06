@@ -11,7 +11,7 @@ clc
 str = getenv('USER');
 if strcmp(str,'hermann')
     addpath('../casadi-osx-matlabR2015a-v3.5.5')
-elseif strcmp(str,'heka94')
+elseif strcmp(str,'heka9489')
     addpath('/opt/casadi-matlab/')
 end
 import casadi.*
@@ -435,6 +435,7 @@ for ll = 1
     save sol.mat sol -v7.3
     % Sol = load('sol.mat'); % matfile('indexYCentralized.mat');
     % sol = Sol.sol;
+    EmailSender
 end
 % -------------------------------------------------------------------------
 
