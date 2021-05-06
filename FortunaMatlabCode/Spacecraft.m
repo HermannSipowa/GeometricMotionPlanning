@@ -37,7 +37,7 @@ classdef Spacecraft
        
       function I_total = Moment_Of_Inertia_Calculator(obj)
          % mass = obj.M+obj.m;
-         I_total = [1; 1; 2]./2; % [1/12*mass*obj.L^2; 1/12*mass*obj.l^2; 1/12*mass*(obj.L^2+obj.l^2)];
+         I_total = [1; 1; 2]./4; % [1/12*mass*obj.L^2; 1/12*mass*obj.l^2; 1/12*mass*(obj.L^2+obj.l^2)];
          
       end
       

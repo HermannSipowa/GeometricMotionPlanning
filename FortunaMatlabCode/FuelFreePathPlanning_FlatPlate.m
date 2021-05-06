@@ -8,11 +8,12 @@ close all
 start_up
 format long e
 clc
-% str1 = '/Users/';
-% str2 = getenv('USER');
-% str3 = '/Desktop/casadi-osx-matlabR2015a-v3.5.5';
-% addpath(append(str1,str2,str3))
-% addpath('../casadi-osx-matlabR2015a-v3.5.5')
+str = getenv('USER');
+if strcmp(str,'hermann')
+    addpath('../casadi-osx-matlabR2015a-v3.5.5')
+elseif strcmp(str,'heka94')
+    addpath('/opt/casadi-matlab/')
+end
 import casadi.*
 global mu_Earth Target Chasser M ...
     Tc Num_Agent ae JD AU % iteration InitalCondition
@@ -819,7 +820,7 @@ for ll = 1
     set(fh2,'PaperPositionMode','manual')
     fh2.PaperUnits = 'inches';
     fh2.PaperPosition = [0 0 5580 4320]/res;
-    save figure
+    % save figure
     print(fh2,'Quaternion_Tracking_6DoF','-dpng',sprintf('-r%d',res))
     
     
@@ -1044,134 +1045,134 @@ end
 
 %% ------ Animation of the homotopy trasformation during convergence ------
 for ll = 1
-    cMat1 = [c5;c6];
-    cMat2 = [c3;c1];
-    cMat0 = [c7;c4];
-    
-    fh2 = figure('Renderer', 'painters', 'Position', [10 10 1400 1000]);
-    view(68,10)
-    hold on
-    plt0  = zeros(Num_Agent);
-    plt1  = zeros(Num_Agent);
-    plt2  = zeros(Num_Agent);
-    for jj = 1:Num_Agent
-        idx = 1+N*(jj-1):N*jj;
-        
-        % plt0(:,jj) = plot3(X_ode45(:,idx(8)),X_ode45(:,idx(9)),X_ode45(:,idx(10)),...
-        %     '--','Color',cMat0(jj,:),'LineWidth',2.5);
-        
-        plt1(:,jj) = plot3(Xrel0(1,idx(1)),Xrel0(1,idx(2)),Xrel0(1,idx(3)),'*',...
-            'LineWidth',3,...
-            'MarkerEdgeColor',cMat1(jj,:),...
-            'MarkerFaceColor',cMat1(jj,:)',...
-            'MarkerSize',8);
-        
-        
-        plt2(:,jj) = plot3(Xrel1(1,idx(1)),Xrel1(1,idx(2)),Xrel1(1,idx(3)),'o',...
-            'LineWidth',3,...
-            'MarkerEdgeColor',cMat2(jj,:),...
-            'MarkerFaceColor',cMat2(jj,:),...
-            'MarkerSize',8);
-        
-        h5 = plot3(0,0,0,'bo',...
-            'LineWidth',2,...
-            'MarkerEdgeColor','k',...
-            'MarkerFaceColor','k',...
-            'MarkerSize',15);
-        h4 = plot3(Xrel0(:,idx(1)),Xrel0(:,idx(2)),Xrel0(:,idx(3)),'Color',cMat1(jj,:));
-        h3 = plot3(Xrel1(:,idx(1)),Xrel1(:,idx(2)),Xrel1(:,idx(3)),'Color',cMat2(jj,:));
-        
-        grid on
-        xlabel('X [km]')
-        ylabel('Y [km]')
-        zlabel('Z [km]')
-        % title('{\color{black} 3D Relative Trajectory}','interpreter','tex')
-        
-        grid on
-        grid minor
-    end
-    
-    % r = 1;
-    % [x_sphere, y_sphere, z_sphere] = sphere(100);
-    % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
-    % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
-    % axis equal
-    
-    h6 = plot3(sol(end,:,8),sol(end,:,9),sol(end,:,10),'Color',c11);
-    
-    
-    tpointsCorase = 250;
-    xpointsCorase = 250;
-    Tmesh = [0, logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
-    Xmesh = linspace(0,T,xpointsCorase); % discretization of the curve
-    [X,Y] = meshgrid(Tmesh,Xmesh);
-    
-    Agent1_u1 = interp2(t,x,sol(:,:,8),X,Y);
-    Agent1_u2 = interp2(t,x,sol(:,:,9),X,Y);
-    Agent1_u3 = interp2(t,x,sol(:,:,10),X,Y);
-    
-    Xrel2 = [Agent1_u1(1,:);Agent1_u2(1,:);Agent1_u3(1,:)];
-    X = Xrel2(1,:);
-    Y = Xrel2(2,:);
-    Z = Xrel2(3,:);
-    h2 = plot3(X,Y,Z,'Color',c9,'LineWidth',2);
-    hold on
-    h1 = plot3(X,Y,Z,'r','LineWidth',2);
-    grid on;
-    % title('Nonlinear Geomeric Planning - 3D configuration');
-    xlabel('$x[km]$');
-    ylabel('$y[km]$');
-    zlabel('$z[km]$');
-    hL = legend([h5, h4, h3, h6, h2, h1],...
-        {'Chief','Deputy Int Condition',...
-        'Deputy End Condition','Deputy Transfer Traj',...
-        'Initial Guess','Homotopy Iteration'},...
-        'AutoUpdate','off');
-    newPosition = [0.2 0.7 0.1 0.1];
-    newUnits = 'normalized';
-    set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
-    set(gca,'FontSize',30)
-    
-    set(gca,'nextplot','replacechildren','visible','on')
-    
-    fig  = getframe(fh2);
-    [im,map] = rgb2ind(fig.cdata,256,'nodither'); % 65536
-    im(1,1,1,tpointsCorase) = 0;
-    for i = 1:tpointsCorase
-        Xrel2 = [Agent1_u1(i,:);Agent1_u2(i,:);Agent1_u3(i,:)];
-        X = Xrel2(1,:); h1.XDataSource='X';
-        Y = Xrel2(2,:); h1.YDataSource='Y';
-        Z = Xrel2(3,:); h1.ZDataSource='Z';
-        refreshdata(h1,'caller');
-        drawnow;
-        view(68,10)
-        
-        % view(22,7)
-        % if i == tpointsCorase
-        %     % set all units inside figure to normalized so that everything is scaling accordingly
-        %     set(findall(fh2,'Units','pixels'),'Units','normalized');
-        %     % do show figure on screen
-        %     set(fh2, 'visible', 'on')
-        %     % set figure units to pixels & adjust figure size
-        %     fh2.Units = 'pixels';
-        %     fh2.OuterPosition = [10 10 900 800];
-        %     % define resolution figure to be saved in dpi
-        %     res = 500;
-        %     % recalculate figure size to be saved
-        %     set(fh2,'PaperPositionMode','manual')
-        %     fh2.PaperUnits = 'inches';
-        %     fh2.PaperPosition = [0 0 5580 4320]/res;
-        %     % save figure
-        %     print(fh2,'AGHF_Solutio_6DoF','-dpng',sprintf('-r%d',res))
-        % end
-        
-        
-        
-        f = getframe(fh2);
-        im(:,:,1,i) = rgb2ind(f.cdata,map,'nodither');
-    end
-    imwrite(im,map,'AGHF_6DoF_SRP.gif','DelayTime',0.,'LoopCount',inf) %g443800
-    
+    % cMat1 = [c5;c6];
+    % cMat2 = [c3;c1];
+    % cMat0 = [c7;c4];
+    %
+    % fh2 = figure('Renderer', 'painters', 'Position', [10 10 1400 1000]);
+    % view(68,10)
+    % hold on
+    % plt0  = zeros(Num_Agent);
+    % plt1  = zeros(Num_Agent);
+    % plt2  = zeros(Num_Agent);
+    % for jj = 1:Num_Agent
+    %     idx = 1+N*(jj-1):N*jj;
+    %
+    %     % plt0(:,jj) = plot3(X_ode45(:,idx(8)),X_ode45(:,idx(9)),X_ode45(:,idx(10)),...
+    %     %     '--','Color',cMat0(jj,:),'LineWidth',2.5);
+    %
+    %     plt1(:,jj) = plot3(Xrel0(1,idx(1)),Xrel0(1,idx(2)),Xrel0(1,idx(3)),'*',...
+    %         'LineWidth',3,...
+    %         'MarkerEdgeColor',cMat1(jj,:),...
+    %         'MarkerFaceColor',cMat1(jj,:)',...
+    %         'MarkerSize',8);
+    %
+    %
+    %     plt2(:,jj) = plot3(Xrel1(1,idx(1)),Xrel1(1,idx(2)),Xrel1(1,idx(3)),'o',...
+    %         'LineWidth',3,...
+    %         'MarkerEdgeColor',cMat2(jj,:),...
+    %         'MarkerFaceColor',cMat2(jj,:),...
+    %         'MarkerSize',8);
+    %
+    %     h5 = plot3(0,0,0,'bo',...
+    %         'LineWidth',2,...
+    %         'MarkerEdgeColor','k',...
+    %         'MarkerFaceColor','k',...
+    %         'MarkerSize',15);
+    %     h4 = plot3(Xrel0(:,idx(1)),Xrel0(:,idx(2)),Xrel0(:,idx(3)),'Color',cMat1(jj,:));
+    %     h3 = plot3(Xrel1(:,idx(1)),Xrel1(:,idx(2)),Xrel1(:,idx(3)),'Color',cMat2(jj,:));
+    %
+    %     grid on
+    %     xlabel('X [km]')
+    %     ylabel('Y [km]')
+    %     zlabel('Z [km]')
+    %     % title('{\color{black} 3D Relative Trajectory}','interpreter','tex')
+    %
+    %     grid on
+    %     grid minor
+    % end
+    %
+    % % r = 1;
+    % % [x_sphere, y_sphere, z_sphere] = sphere(100);
+    % % h = surf(r*x_sphere, r*y_sphere, r*z_sphere);
+    % % set(h,'FaceAlpha', 0.09, 'EdgeColor', 'b', 'EdgeAlpha',.05, 'FaceColor', 'b');
+    % % axis equal
+    %
+    % h6 = plot3(sol(end,:,8),sol(end,:,9),sol(end,:,10),'Color',c11);
+    %
+    %
+    % tpointsCorase = 250;
+    % xpointsCorase = 250;
+    % Tmesh = [0, logspace(-4,log10(tmax),tpointsCorase-1)]; % discretization of time
+    % Xmesh = linspace(0,T,xpointsCorase); % discretization of the curve
+    % [X,Y] = meshgrid(Tmesh,Xmesh);
+    %
+    % Agent1_u1 = interp2(t,x,sol(:,:,8),X,Y);
+    % Agent1_u2 = interp2(t,x,sol(:,:,9),X,Y);
+    % Agent1_u3 = interp2(t,x,sol(:,:,10),X,Y);
+    %
+    % Xrel2 = [Agent1_u1(1,:);Agent1_u2(1,:);Agent1_u3(1,:)];
+    % X = Xrel2(1,:);
+    % Y = Xrel2(2,:);
+    % Z = Xrel2(3,:);
+    % h2 = plot3(X,Y,Z,'Color',c9,'LineWidth',2);
+    % hold on
+    % h1 = plot3(X,Y,Z,'r','LineWidth',2);
+    % grid on;
+    % % title('Nonlinear Geomeric Planning - 3D configuration');
+    % xlabel('$x[km]$');
+    % ylabel('$y[km]$');
+    % zlabel('$z[km]$');
+    % hL = legend([h5, h4, h3, h6, h2, h1],...
+    %     {'Chief','Deputy Int Condition',...
+    %     'Deputy End Condition','Deputy Transfer Traj',...
+    %     'Initial Guess','Homotopy Iteration'},...
+    %     'AutoUpdate','off');
+    % newPosition = [0.2 0.7 0.1 0.1];
+    % newUnits = 'normalized';
+    % set(hL,'Position', newPosition,'Units', newUnits,'NumColumns',1);
+    % set(gca,'FontSize',30)
+    %
+    % set(gca,'nextplot','replacechildren','visible','on')
+    %
+    % fig  = getframe(fh2);
+    % [im,map] = rgb2ind(fig.cdata,256,'nodither'); % 65536
+    % im(1,1,1,tpointsCorase) = 0;
+    % for i = 1:tpointsCorase
+    %     Xrel2 = [Agent1_u1(i,:);Agent1_u2(i,:);Agent1_u3(i,:)];
+    %     X = Xrel2(1,:); h1.XDataSource='X';
+    %     Y = Xrel2(2,:); h1.YDataSource='Y';
+    %     Z = Xrel2(3,:); h1.ZDataSource='Z';
+    %     refreshdata(h1,'caller');
+    %     drawnow;
+    %     view(68,10)
+    %
+    %     % view(22,7)
+    %     % if i == tpointsCorase
+    %     %     % set all units inside figure to normalized so that everything is scaling accordingly
+    %     %     set(findall(fh2,'Units','pixels'),'Units','normalized');
+    %     %     % do show figure on screen
+    %     %     set(fh2, 'visible', 'on')
+    %     %     % set figure units to pixels & adjust figure size
+    %     %     fh2.Units = 'pixels';
+    %     %     fh2.OuterPosition = [10 10 900 800];
+    %     %     % define resolution figure to be saved in dpi
+    %     %     res = 500;
+    %     %     % recalculate figure size to be saved
+    %     %     set(fh2,'PaperPositionMode','manual')
+    %     %     fh2.PaperUnits = 'inches';
+    %     %     fh2.PaperPosition = [0 0 5580 4320]/res;
+    %     %     % save figure
+    %     %     print(fh2,'AGHF_Solutio_6DoF','-dpng',sprintf('-r%d',res))
+    %     % end
+    %
+    %
+    %
+    %     f = getframe(fh2);
+    %     im(:,:,1,i) = rgb2ind(f.cdata,map,'nodither');
+    % end
+    % imwrite(im,map,'AGHF_6DoF_SRP.gif','DelayTime',0.,'LoopCount',inf) %g443800
+
 end
 % -------------------------------------------------------------------------
 
